@@ -2,13 +2,13 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ranking } from "../../cs-labs.config";
 import { computeRatings } from "./ranking";
-import { getMatches, getPlayers, isKvConfigured } from "./storage";
+import { getMatches, getPlayers, isStoreConfigured } from "./storage";
 import type { MatchRecord, Player, PlayerRating } from "./types";
 
 export type RankedPlayer = PlayerRating & { displayName: string };
 
 /**
- * Lets the site run locally before Vercel KV is provisioned: drop matches.json and
+ * Lets the site run locally before Redis is provisioned: drop matches.json and
  * players.json into .data/ and the read model picks them up. Never consulted in
  * production, so there is no path where fixture data reaches the real site.
  */
@@ -24,14 +24,14 @@ async function readLocal<T>(file: string): Promise<T[]> {
 }
 
 export async function loadMatches(): Promise<MatchRecord[]> {
-  const matches = isKvConfigured()
+  const matches = isStoreConfigured()
     ? await getMatches()
     : await readLocal<MatchRecord>("matches.json");
   return matches.slice().sort((a, b) => a.playedAt.localeCompare(b.playedAt));
 }
 
 export async function loadPlayers(): Promise<Player[]> {
-  return isKvConfigured() ? getPlayers() : readLocal<Player>("players.json");
+  return isStoreConfigured() ? getPlayers() : readLocal<Player>("players.json");
 }
 
 export async function loadRankings(): Promise<{

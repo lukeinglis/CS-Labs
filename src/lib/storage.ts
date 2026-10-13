@@ -1,4 +1,4 @@
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 import { exactFingerprint, looseFingerprint } from "./fingerprint";
 import { normalizeName } from "./names";
 import type { MatchRecord, Player } from "./types";
@@ -7,17 +7,29 @@ const PLAYERS = "players";
 const MATCHES = "matches";
 const ALIASES = "aliases";
 
-export function isKvConfigured(): boolean {
+export function isStoreConfigured(): boolean {
   return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 }
 
-function getKv() {
-  if (!isKvConfigured()) {
+// Built on first use rather than at module scope, so a build without the credentials
+// present does not crash while Next.js evaluates this module.
+let client: Redis | null = null;
+
+/**
+ * Redis.fromEnv() is not usable here: the Vercel Marketplace injects the Upstash
+ * credentials under KV_REST_API_*, not the UPSTASH_REDIS_REST_* names it looks for.
+ */
+function getKv(): Redis {
+  if (!isStoreConfigured()) {
     throw new Error(
-      "Vercel KV is not configured. Set KV_REST_API_URL and KV_REST_API_TOKEN."
+      "Redis is not configured. Set KV_REST_API_URL and KV_REST_API_TOKEN."
     );
   }
-  return kv;
+  client ??= new Redis({
+    url: process.env.KV_REST_API_URL!,
+    token: process.env.KV_REST_API_TOKEN!,
+  });
+  return client;
 }
 
 /** mget has a request size ceiling, and the match log only grows. */
