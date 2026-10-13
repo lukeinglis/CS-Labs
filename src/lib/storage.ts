@@ -8,20 +8,27 @@ const MATCHES = "matches";
 const ALIASES = "aliases";
 
 export function isStoreConfigured(): boolean {
-  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 }
 
-// Built on first use rather than at module scope, so a build without the Upstash env
-// vars present does not crash while Next.js evaluates this module.
+// Built on first use rather than at module scope, so a build without the credentials
+// present does not crash while Next.js evaluates this module.
 let client: Redis | null = null;
 
+/**
+ * Redis.fromEnv() is not usable here: the Vercel Marketplace injects the Upstash
+ * credentials under KV_REST_API_*, not the UPSTASH_REDIS_REST_* names it looks for.
+ */
 function getKv(): Redis {
   if (!isStoreConfigured()) {
     throw new Error(
-      "Redis is not configured. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN."
+      "Redis is not configured. Set KV_REST_API_URL and KV_REST_API_TOKEN."
     );
   }
-  client ??= Redis.fromEnv();
+  client ??= new Redis({
+    url: process.env.KV_REST_API_URL!,
+    token: process.env.KV_REST_API_TOKEN!,
+  });
   return client;
 }
 
