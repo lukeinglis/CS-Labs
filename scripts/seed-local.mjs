@@ -52,12 +52,13 @@ function statLine(player, rounds, teamWon, share) {
   const kpr = Math.max(0.15, 0.72 * base + (rand() - 0.5) * 0.12);
   const dpr = Math.min(0.9, Math.max(0.3, 0.68 / Math.max(base, 0.5) + (rand() - 0.5) * 0.1));
   const apr = Math.max(0.04, 0.14 + (rand() - 0.5) * 0.12);
+  const adr = Math.max(15, 78 * base + (rand() - 0.5) * 12);
   return {
     playerId: player.id,
     kills: Math.round(kpr * rounds),
     assists: Math.round(apr * rounds),
     deaths: Math.max(1, Math.round(dpr * rounds)),
-    adr: Math.round((78 * base + (rand() - 0.5) * 12) * 10) / 10,
+    damage: Math.round(adr * rounds),
   };
 }
 

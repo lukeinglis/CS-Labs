@@ -13,7 +13,11 @@ export type PlayerStatLine = {
   kills: number;
   assists: number;
   deaths: number;
-  adr: number;
+  /**
+   * Total damage, as the CS2 scoreboard reports it. ADR is derived from this and the
+   * round count, so correcting a match's rounds retroactively fixes every ADR.
+   */
+  damage: number;
   headshotPct?: number;
   /**
    * Set when someone joined an in-progress game. Their stats cover fewer rounds

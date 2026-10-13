@@ -47,13 +47,17 @@ function displayOrdinal(r: { mu: number; sigma: number }, config: RankingConfig)
   });
 }
 
+export function adr(line: PlayerStatLine, rounds: number): number {
+  return line.damage / Math.max(1, rounds);
+}
+
 function perRound(line: PlayerStatLine, rounds: number) {
   return {
     playerId: line.playerId,
     kpr: line.kills / rounds,
     apr: line.assists / rounds,
     dpr: line.deaths / rounds,
-    adr: line.adr,
+    adr: adr(line, rounds),
   };
 }
 

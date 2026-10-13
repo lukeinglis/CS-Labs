@@ -7,9 +7,9 @@ function line(
   kills: number,
   assists: number,
   deaths: number,
-  adr: number
+  damage: number
 ): PlayerStatLine {
-  return { playerId, kills, assists, deaths, adr };
+  return { playerId, kills, assists, deaths, damage };
 }
 
 function match(overrides: Partial<MatchRecord> = {}): MatchRecord {

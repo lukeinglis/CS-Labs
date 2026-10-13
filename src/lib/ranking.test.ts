@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ranking as config } from "../../cs-labs.config";
-import { blendDelta, computeMatchPerf, computeRatings } from "./ranking";
+import { adr, blendDelta, computeMatchPerf, computeRatings } from "./ranking";
 import type { MatchRecord, PlayerStatLine, Side } from "./types";
 
 /** Rating a player starts on, before any match has been played. */
@@ -8,7 +8,7 @@ const BASELINE =
   config.displayAlpha * (config.mu - config.z * config.sigma) + config.displayTarget;
 
 function line(playerId: string, overrides: Partial<PlayerStatLine> = {}): PlayerStatLine {
-  return { playerId, kills: 15, assists: 4, deaths: 15, adr: 75, ...overrides };
+  return { playerId, kills: 15, assists: 4, deaths: 15, damage: 1500, ...overrides };
 }
 
 function makeMatch(opts: {
@@ -51,6 +51,18 @@ function byId(ratings: ReturnType<typeof computeRatings>, id: string) {
   if (!found) throw new Error(`no rating for ${id}`);
   return found;
 }
+
+describe("adr", () => {
+  it("derives average damage per round from the raw total", () => {
+    expect(adr(line("x", { damage: 2411 }), 19)).toBeCloseTo(126.9, 1);
+  });
+
+  it("follows a corrected round count", () => {
+    const l = line("x", { damage: 2400 });
+    expect(adr(l, 24)).toBeCloseTo(100);
+    expect(adr(l, 20)).toBeCloseTo(120);
+  });
+});
 
 describe("blendDelta", () => {
   it("leaves the delta untouched for an exactly average game", () => {
@@ -96,9 +108,9 @@ describe("computeMatchPerf", () => {
     const match = makeMatch({
       roundsWon: [13, 7],
       teamA: [
-        line("star", { kills: 30, deaths: 8, adr: 140, assists: 8 }),
+        line("star", { kills: 30, deaths: 8, damage: 2800, assists: 8 }),
         ...["a2", "a3", "a4"].map((p) => line(p)),
-        line("anchor", { kills: 4, deaths: 20, adr: 30, assists: 1 }),
+        line("anchor", { kills: 4, deaths: 20, damage: 600, assists: 1 }),
       ],
       teamB: ["b1", "b2", "b3", "b4", "b5"].map((p) => line(p)),
     });
@@ -110,7 +122,7 @@ describe("computeMatchPerf", () => {
   it("does not explode on a zero-death game", () => {
     const match = makeMatch({
       roundsWon: [13, 0],
-      teamA: [line("flawless", { deaths: 0, kills: 20, adr: 110 }), line("a2")],
+      teamA: [line("flawless", { deaths: 0, kills: 20, damage: 2200 }), line("a2")],
       teamB: [line("b1"), line("b2")],
     });
     const perf = computeMatchPerf(match, config);
@@ -164,14 +176,39 @@ describe("computeRatings", () => {
     );
   });
 
+  // The group plays whatever turns up, so every size from 2v2 upwards is real input.
+  it.each([
+    [2, 2],
+    [2, 3],
+    [3, 3],
+    [3, 4],
+    [4, 4],
+    [4, 5],
+    [5, 5],
+  ])("rates a %iv%i lobby", (sizeA, sizeB) => {
+    const ratings = computeRatings(
+      [
+        makeMatch({
+          roundsWon: [13, 8],
+          teamA: Array.from({ length: sizeA }, (_, i) => line(`a${i}`)),
+          teamB: Array.from({ length: sizeB }, (_, i) => line(`b${i}`)),
+        }),
+      ],
+      config
+    );
+    expect(ratings).toHaveLength(sizeA + sizeB);
+    for (const r of ratings) expect(Number.isFinite(r.overall)).toBe(true);
+    expect(byId(ratings, "a0").overall).toBeGreaterThan(byId(ratings, "b0").overall);
+  });
+
   it("keeps a hard carry on a loss from gaining overall rating", () => {
     const ratings = computeRatings(
       [
         makeMatch({
           roundsWon: [7, 13],
           teamA: [
-            line("carry", { kills: 34, deaths: 12, adr: 150, assists: 9 }),
-            ...["a2", "a3", "a4", "a5"].map((p) => line(p, { kills: 6, adr: 40 })),
+            line("carry", { kills: 34, deaths: 12, damage: 3000, assists: 9 }),
+            ...["a2", "a3", "a4", "a5"].map((p) => line(p, { kills: 6, damage: 800 })),
           ],
           teamB: ["b1", "b2", "b3", "b4", "b5"].map((p) => line(p)),
         }),
@@ -232,7 +269,7 @@ describe("computeRatings", () => {
       roundsWon: [13, 5],
       teamA: [
         ...["a1", "a2", "a3", "a4"].map((p) => line(p)),
-        line("latecomer", { joinedLate: true, kills: 2, deaths: 4, adr: 20, assists: 0 }),
+        line("latecomer", { joinedLate: true, kills: 2, deaths: 4, damage: 400, assists: 0 }),
       ],
       teamB: ["b1", "b2", "b3", "b4", "b5"].map((p) => line(p)),
     });
@@ -245,7 +282,7 @@ describe("computeRatings", () => {
       roundsWon: [13, 5],
       teamA: [
         ...["a1", "a2", "a3", "a4"].map((p) => line(p)),
-        line("latecomer", { joinedLate: true, kills: 1, deaths: 9, adr: 10, assists: 0 }),
+        line("latecomer", { joinedLate: true, kills: 1, deaths: 9, damage: 200, assists: 0 }),
       ],
       teamB: ["b1", "b2", "b3", "b4", "b5"].map((p) => line(p)),
     });
@@ -261,7 +298,7 @@ describe("computeRatings", () => {
       [
         makeMatch({
           roundsWon: [13, 5],
-          teamA: [line("a1"), line("latecomer", { joinedLate: true, kills: 1, adr: 9 })],
+          teamA: [line("a1"), line("latecomer", { joinedLate: true, kills: 1, damage: 180 })],
           teamB: [line("b1"), line("b2")],
         }),
       ],
