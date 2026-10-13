@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Gunmetal base, a cooler and flatter dark than the navy used elsewhere. */
+  --color-ink: #0e1217;
+  --color-ink-dark: #080a0e;
+  --color-ink-light: #171d26;
+  --color-ink-lighter: #202833;
+
+  /* Amber is the primary accent and doubles as the T side. */
+  --color-accent: #f2a93b;
+  --color-accent-dim: #c4821f;
+
+  /* Blue is the secondary accent and doubles as the CT side. */
+  --color-ct: #5b9dd9;
+  --color-ct-dim: #3b7ab5;
+
+  --color-gold: #ffd36b;
+  --color-silver: #c8d0d8;
+  --color-bronze: #cd7f32;
+
+  --color-win: #3fcf8e;
+  --color-loss: #e5634d;
+
+  --font-heading: var(--font-oswald);
+  --font-body: var(--font-inter);
+}
+
+/* Faint graph paper, used behind page headers to lean on the "labs" framing. */
+.grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.dot-pattern {
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #f2a93b, #5b9dd9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-glow {
+  transition: box-shadow 0.3s ease;
+}
+.card-glow:hover {
+  box-shadow: 0 0 20px rgba(242, 169, 59, 0.12);
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out;
+}
+
+.animate-delay-100 { animation-delay: 0.1s; animation-fill-mode: backwards; }
+.animate-delay-200 { animation-delay: 0.2s; animation-fill-mode: backwards; }
+.animate-delay-300 { animation-delay: 0.3s; animation-fill-mode: backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up {
+    animation: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-lighter);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+body {
+  background: var(--color-ink);
+  color: #dce3ea;
+  font-family: var(--font-body), system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* The app is mostly stat tables, so figures should never jitter between rows. */
+th,
+td {
+  font-variant-numeric: tabular-nums;
+}
