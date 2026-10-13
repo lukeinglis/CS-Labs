@@ -51,6 +51,7 @@ export type MatchRecord = {
   source: MatchSource;
   voided?: boolean;
   voidReason?: string;
+  voidedBy?: string;
 };
 
 export type RankingConfig = {
