@@ -1,6 +1,7 @@
 "use server";
 
 import { timingSafeEqual } from "node:crypto";
+import { put } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import {
   NEW_PLAYER,
@@ -10,8 +11,11 @@ import {
   validateDraft,
   type DraftMatch,
 } from "@/lib/draft";
+import { extractionWarnings, toDraft } from "@/lib/extract";
+import { normalizeName } from "@/lib/names";
 import {
   findDuplicate,
+  getAliases,
   getPlayers,
   isStoreConfigured,
   saveMatch,
@@ -19,11 +23,20 @@ import {
   setAlias,
   type DuplicateHit,
 } from "@/lib/storage";
-import type { Player } from "@/lib/types";
+import { isVisionConfigured, readScoreboard, VisionError } from "@/lib/vision";
+import type { MatchSource, Player } from "@/lib/types";
 
 export type SubmitResult =
   | { ok: true; matchId: string }
   | { ok: false; errors: string[]; duplicate?: DuplicateHit };
+
+/** Where a draft came from, as the browser reports it. Re-checked before it is stored. */
+export type DraftOrigin = {
+  blobUrl: string;
+  extractionModel: string;
+  /** Dotted paths the submitter changed after extraction, e.g. "teams.0.players.2.kills". */
+  editedFields: string[];
+};
 
 export type SubmitInput = {
   passphrase: string;
@@ -31,7 +44,81 @@ export type SubmitInput = {
   draft: DraftMatch;
   /** Set once the submitter has seen a duplicate warning and chosen to save anyway. */
   acceptDuplicate?: boolean;
+  origin?: DraftOrigin;
 };
+
+export type ExtractResult =
+  | { ok: true; draft: DraftMatch; warnings: string[]; blobUrl: string; extractionModel: string }
+  | { ok: false; errors: string[] };
+
+export type ExtractInput = {
+  passphrase: string;
+  /** A downscaled JPEG, base64 encoded without the data-URL prefix. */
+  imageBase64: string;
+  /** Local wall-clock time to seed the draft with, since a scoreboard carries no date. */
+  playedAt: string;
+};
+
+/** Caps what a single request can spend on the vision API, in decoded bytes. */
+const MAX_IMAGE_BYTES = 1_500_000;
+
+/**
+ * Reads a scoreboard image into an editable draft. Passphrase-gated like submitMatch,
+ * because this one costs money per call and would otherwise be an open API proxy.
+ */
+export async function extractScoreboard(input: ExtractInput): Promise<ExtractResult> {
+  if (!passphraseMatches(input.passphrase ?? "")) {
+    return { ok: false, errors: ["That passphrase is not right."] };
+  }
+  if (!isVisionConfigured()) {
+    return { ok: false, errors: ["Screenshot reading is not configured."] };
+  }
+
+  const base64 = input.imageBase64 ?? "";
+  if (!base64) return { ok: false, errors: ["No image was uploaded."] };
+  if (base64.length * 0.75 > MAX_IMAGE_BYTES) {
+    return { ok: false, errors: ["That image is too large even after resizing."] };
+  }
+
+  let raw, model;
+  try {
+    ({ raw, model } = await readScoreboard(base64));
+  } catch (err) {
+    if (err instanceof VisionError) return { ok: false, errors: [err.message] };
+    throw err;
+  }
+
+  const draft = toDraft(raw, input.playedAt);
+
+  // Resolving handles here rather than in the browser means a returning player is
+  // already matched when the form appears, so a repeat lineup needs no dropdown work.
+  const aliases = await getAliases();
+  const resolved: DraftMatch = {
+    ...draft,
+    teams: draft.teams.map((team) => ({
+      ...team,
+      players: team.players.map((line) => ({
+        ...line,
+        playerId: aliases[normalizeName(line.name)],
+      })),
+    })) as DraftMatch["teams"],
+  };
+
+  // The screenshot is kept so a disputed match can be checked against what was actually
+  // on screen. This is the downscaled copy, which is the one the model read.
+  const blob = await put(`scoreboards/${newMatchId()}.jpg`, Buffer.from(base64, "base64"), {
+    access: "public",
+    contentType: "image/jpeg",
+  });
+
+  return {
+    ok: true,
+    draft: resolved,
+    warnings: extractionWarnings(raw),
+    blobUrl: blob.url,
+    extractionModel: model,
+  };
+}
 
 function passphraseMatches(supplied: string): boolean {
   const expected = process.env.SUBMIT_PASSPHRASE;
@@ -40,6 +127,33 @@ function passphraseMatches(supplied: string): boolean {
   const b = Buffer.from(expected);
   // timingSafeEqual throws on a length mismatch, which would itself leak the length.
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * The browser claims where a draft came from, so the blob URL is checked against the
+ * store's own hostname rather than trusted. A bad claim downgrades to manual instead of
+ * failing the save: provenance is an audit detail, not a reason to lose a match.
+ */
+function sourceFrom(origin: DraftOrigin | undefined, confirmedBy: string): MatchSource {
+  if (!origin?.blobUrl) return { kind: "manual", confirmedBy };
+
+  let host: string;
+  try {
+    const url = new URL(origin.blobUrl);
+    if (url.protocol !== "https:") return { kind: "manual", confirmedBy };
+    host = url.hostname;
+  } catch {
+    return { kind: "manual", confirmedBy };
+  }
+  if (!host.endsWith(".blob.vercel-storage.com")) return { kind: "manual", confirmedBy };
+
+  return {
+    kind: "screenshot",
+    blobUrl: origin.blobUrl,
+    confirmedBy,
+    extractionModel: String(origin.extractionModel ?? "unknown"),
+    editedFields: (origin.editedFields ?? []).filter((f) => typeof f === "string").slice(0, 200),
+  };
 }
 
 /**
@@ -106,7 +220,7 @@ export async function submitMatch(input: SubmitInput): Promise<SubmitResult> {
     id: newMatchId(),
     submittedBy,
     submittedAt: now,
-    source: { kind: "manual", confirmedBy: submittedBy },
+    source: sourceFrom(input.origin, submittedBy),
   });
 
   const duplicate = await findDuplicate(match);
