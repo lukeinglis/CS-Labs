@@ -349,12 +349,13 @@ function TeamEditor({
                 &times;
               </button>
             </div>
-            <div className="mt-2 grid grid-cols-4 gap-2">
+            {/* Column order mirrors the CS2 scoreboard so a row can be typed straight across. */}
+            <div className="mt-2 grid grid-cols-5 gap-2">
               {(
                 [
                   ["kills", "K"],
-                  ["assists", "A"],
                   ["deaths", "D"],
+                  ["assists", "A"],
                   ["damage", "DMG"],
                 ] as const
               ).map(([field, label]) => (
@@ -372,6 +373,24 @@ function TeamEditor({
                   />
                 </div>
               ))}
+              <div>
+                <label className={LABEL} htmlFor={`${team.label}-${row}-headshotPct`}>
+                  HS%
+                </label>
+                <input
+                  id={`${team.label}-${row}-headshotPct`}
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={line.headshotPct ?? ""}
+                  onChange={(e) =>
+                    onLineChange(row, {
+                      headshotPct: e.target.value === "" ? undefined : Number(e.target.value),
+                    })
+                  }
+                  className={`mt-1 w-full text-center ${FIELD}`}
+                />
+              </div>
             </div>
             <label className="mt-2 flex items-center gap-2 text-xs text-gray-500">
               <input
