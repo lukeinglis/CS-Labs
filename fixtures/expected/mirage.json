@@ -1,0 +1,29 @@
+{
+  "image": "fixtures/scoreboards/IMG_4044.JPG",
+  "note": "First real logged match. Phone photo of a monitor, so it is glare-heavy and skewed, which makes it a fair worst case for extraction. Transcribed by hand and cross-checked: CT kills 80 equals T deaths 80 exactly, and HawknessMonstAr's 1051 damage over 23 rounds is 45.7, matching the 45 ADR on the post-match card.",
+  "map": "Mirage",
+  "teams": [
+    {
+      "side": "CT",
+      "roundsWon": 13,
+      "players": [
+        { "name": "ALT_ER", "kills": 25, "deaths": 13, "assists": 5, "headshotPct": 52, "damage": 2360 },
+        { "name": "farside411", "kills": 19, "deaths": 13, "assists": 4, "headshotPct": 36, "damage": 1902 },
+        { "name": "abhi1092", "kills": 13, "deaths": 14, "assists": 6, "headshotPct": 15, "damage": 1544 },
+        { "name": "2ca$h", "kills": 9, "deaths": 17, "assists": 9, "headshotPct": 0, "damage": 1451 },
+        { "name": "gux666", "kills": 14, "deaths": 15, "assists": 2, "headshotPct": 35, "damage": 1172 }
+      ]
+    },
+    {
+      "side": "T",
+      "roundsWon": 10,
+      "players": [
+        { "name": "[AKB48]PanShe", "kills": 21, "deaths": 15, "assists": 5, "headshotPct": 33, "damage": 2671 },
+        { "name": "maxusmusti", "kills": 21, "deaths": 15, "assists": 3, "headshotPct": 28, "damage": 2254 },
+        { "name": "pepiko", "kills": 8, "deaths": 20, "assists": 6, "headshotPct": 25, "damage": 1378 },
+        { "name": "hitman47", "kills": 10, "deaths": 11, "assists": 3, "headshotPct": 20, "damage": 1143 },
+        { "name": "HawknessMonstAr", "kills": 10, "deaths": 19, "assists": 1, "headshotPct": 20, "damage": 1051 }
+      ]
+    }
+  ]
+}

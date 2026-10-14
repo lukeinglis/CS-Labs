@@ -13,6 +13,11 @@ next-env.d.ts
 # Local fixture data from scripts/seed-local.mjs
 .data/
 
+# Scoreboard photos used to tune extraction. The repo is public and these show
+# real people's handles, so the images stay local. Only the expected output is
+# committed, which is what the tests assert against anyway.
+fixtures/scoreboards/
+
 .DS_Store
 *.pem
 npm-debug.log*

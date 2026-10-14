@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { submitMatch } from "@/app/submit/actions";
+import ScreenshotPanel, { type Extraction } from "@/components/ScreenshotPanel";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import {
   NEW_PLAYER,
@@ -12,6 +13,7 @@ import {
   type DraftStatLine,
   type DraftTeam,
 } from "@/lib/draft";
+import { editedFields } from "@/lib/extract";
 import { normalizeName } from "@/lib/names";
 import type { Side } from "@/lib/types";
 
@@ -58,6 +60,7 @@ export default function SubmitClient({
   const [errors, setErrors] = useState<string[]>([]);
   const [duplicate, setDuplicate] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [extraction, setExtraction] = useState<Extraction | null>(null);
 
   // Set on mount rather than in the initial state, because a timestamp computed during
   // the server render would not match the one the browser computes on hydration.
@@ -107,6 +110,13 @@ export default function SubmitClient({
       submittedBy,
       draft,
       acceptDuplicate,
+      ...(extraction && {
+        origin: {
+          blobUrl: extraction.blobUrl,
+          extractionModel: extraction.extractionModel,
+          editedFields: editedFields(extraction.original, draft),
+        },
+      }),
     });
     if (result.ok) {
       setSavedId(result.matchId);
@@ -141,6 +151,7 @@ export default function SubmitClient({
                   map: maps[0] ?? "",
                   teams: [emptyTeam("A", "CT"), emptyTeam("B", "T")],
                 });
+                setExtraction(null);
                 setSavedId(null);
                 setStatus("idle");
               }}
@@ -198,6 +209,9 @@ export default function SubmitClient({
               onChange={(e) => setDraft((d) => ({ ...d, map: e.target.value }))}
               className={`mt-2 w-full ${FIELD}`}
             >
+              {/* An extraction can name a map the config does not list, and silently
+                  snapping it to the first option would file the match under Mirage. */}
+              {!maps.includes(draft.map) && <option value={draft.map}>{draft.map || "Which map?"}</option>}
               {maps.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -219,6 +233,16 @@ export default function SubmitClient({
           </div>
         </CardBody>
       </Card>
+
+      <ScreenshotPanel
+        passphrase={passphrase}
+        playedAt={draft.playedAt}
+        onExtracted={(extracted, meta) => {
+          setExtraction(meta);
+          setDraft(extracted);
+          setErrors([]);
+        }}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {([0, 1] as const).map((i) => (
