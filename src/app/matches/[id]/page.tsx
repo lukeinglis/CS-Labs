@@ -12,7 +12,7 @@ import {
   StatTile,
 } from "@/components/ui";
 import { loadMatches, loadPlayers } from "@/lib/data";
-import { computeMatchPerf } from "@/lib/ranking";
+import { adr, computeMatchPerf } from "@/lib/ranking";
 import type { MatchRecord, MatchTeam } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -98,7 +98,9 @@ function Scoreboard({
                   <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.kills}</td>
                   <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.assists}</td>
                   <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.deaths}</td>
-                  <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.adr}</td>
+                  <td className="px-3 py-2.5 text-center text-sm text-gray-300">
+                    {adr(line, rounds).toFixed(1)}
+                  </td>
                   <td className="px-3 py-2.5 text-center text-sm text-gray-400">
                     {(line.kills / Math.max(line.deaths, 1)).toFixed(2)}
                   </td>

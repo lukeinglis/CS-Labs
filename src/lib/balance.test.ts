@@ -29,7 +29,7 @@ function lobby(): BalancePlayer[] {
 }
 
 function statLine(playerId: string): PlayerStatLine {
-  return { playerId, kills: 15, assists: 4, deaths: 15, adr: 75 };
+  return { playerId, kills: 15, assists: 4, deaths: 15, damage: 1500 };
 }
 
 function matchWithTeams(
@@ -131,6 +131,13 @@ describe("generateSplits", () => {
     const [best] = generateSplits(lobby().slice(0, 9), { limit: 1 });
     expect(best.teamA).toHaveLength(4);
     expect(best.teamB).toHaveLength(5);
+  });
+
+  it.each([4, 5, 6, 7, 8, 9, 10])("splits a %i-player lobby", (size) => {
+    const [best] = generateSplits(lobby().slice(0, size), { limit: 1 });
+    expect(best.teamA).toHaveLength(Math.floor(size / 2));
+    expect(best.teamB).toHaveLength(size - Math.floor(size / 2));
+    expect(new Set([...best.teamA, ...best.teamB]).size).toBe(size);
   });
 
   it("honours a forced team size", () => {

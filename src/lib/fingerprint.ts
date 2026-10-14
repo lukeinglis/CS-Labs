@@ -7,7 +7,7 @@ function hash(parts: string[]): string {
 
 function teamBlock(team: MatchTeam): string {
   const lines = team.players
-    .map((p) => `${p.playerId},${p.kills},${p.assists},${p.deaths},${p.adr}`)
+    .map((p) => `${p.playerId},${p.kills},${p.assists},${p.deaths},${p.damage}`)
     .sort();
   return `${team.roundsWon}|${lines.join(";")}`;
 }
