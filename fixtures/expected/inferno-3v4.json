@@ -1,0 +1,29 @@
+{
+  "image": "fixtures/scoreboards/inferno-3v4.jpg",
+  "note": "The first submission from a phone, and the one that exposed the unknown-handle bug: BrUceWaYNe had never played before, which the old validation called an error and refused to save. Also the first uneven lobby (3 v 4) and the first match past regulation, so the shown sides are the final ones and the starting sides are flipped. CT kills 50 against T deaths 58 is a genuine gap rather than a misread, since someone left part way through, so this is the fixture that proves the kill/death check warns instead of blocking. Map reads Infemo on screen because of the in-game rn ligature; the model still returns Inferno.",
+  "map": "Inferno",
+  "roundsPlayed": 24,
+  "teams": [
+    {
+      "side": "CT",
+      "startingSide": "T",
+      "roundsWon": 11,
+      "players": [
+        { "name": "hitman47", "kills": 22, "deaths": 18, "assists": 3, "headshotPct": 27, "damage": 2406 },
+        { "name": "ALT_ER", "kills": 19, "deaths": 14, "assists": 1, "headshotPct": 26, "damage": 2018 },
+        { "name": "2ca$h", "kills": 9, "deaths": 18, "assists": 1, "headshotPct": 22, "damage": 1257 }
+      ]
+    },
+    {
+      "side": "T",
+      "startingSide": "CT",
+      "roundsWon": 13,
+      "players": [
+        { "name": "gux666", "kills": 18, "deaths": 16, "assists": 3, "headshotPct": 33, "damage": 1919 },
+        { "name": "[AKB48]PanShe", "kills": 16, "deaths": 16, "assists": 4, "headshotPct": 31, "damage": 1831 },
+        { "name": "BrUceWaYNe", "kills": 14, "deaths": 9, "assists": 2, "headshotPct": 42, "damage": 1212 },
+        { "name": "HawknessMonstAr", "kills": 6, "deaths": 17, "assists": 2, "headshotPct": 50, "damage": 909 }
+      ]
+    }
+  ]
+}
