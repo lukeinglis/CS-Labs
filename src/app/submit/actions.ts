@@ -55,8 +55,6 @@ export type ExtractInput = {
   passphrase: string;
   /** A downscaled JPEG, base64 encoded without the data-URL prefix. */
   imageBase64: string;
-  /** Local wall-clock time to seed the draft with, since a scoreboard carries no date. */
-  playedAt: string;
 };
 
 /** Caps what a single request can spend on the vision API, in decoded bytes. */
@@ -88,10 +86,13 @@ export async function extractScoreboard(input: ExtractInput): Promise<ExtractRes
     throw err;
   }
 
-  const draft = toDraft(raw, input.playedAt);
+  // playedAt is left blank for the browser to fill, since only it knows the timezone.
+  const draft = toDraft(raw, "");
 
   // Resolving handles here rather than in the browser means a returning player is
   // already matched when the form appears, so a repeat lineup needs no dropdown work.
+  // A handle nobody recognises is a new player, not a problem to be reported: it
+  // arrives already set to join the roster on save.
   const aliases = await getAliases();
   const resolved: DraftMatch = {
     ...draft,
@@ -99,7 +100,7 @@ export async function extractScoreboard(input: ExtractInput): Promise<ExtractRes
       ...team,
       players: team.players.map((line) => ({
         ...line,
-        playerId: aliases[normalizeName(line.name)],
+        playerId: aliases[normalizeName(line.name)] ?? NEW_PLAYER,
       })),
     })) as DraftMatch["teams"],
   };

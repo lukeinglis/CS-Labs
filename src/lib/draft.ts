@@ -77,8 +77,14 @@ export function validateDraft(draft: DraftMatch): string[] {
 
   for (const line of lines) {
     const who = line.name.trim() || "An unnamed player";
-    if (!line.name.trim()) errors.push("Every row needs a name.");
-    if (!line.playerId) errors.push(`${who} is not matched to anyone on the roster.`);
+    // A named row always carries a playerId, because a handle nobody recognises is a new
+    // player rather than a mistake. So the only way to reach the second branch is to
+    // clear the dropdown by hand, and a blank row should not also complain about it.
+    if (!line.name.trim()) {
+      errors.push("Every row needs a name.");
+    } else if (!line.playerId) {
+      errors.push(`Say who ${who} is, or add them as a new player.`);
+    }
     if (![line.kills, line.assists, line.deaths, line.damage].every(isCount)) {
       errors.push(`${who}: stats must be whole numbers and cannot be negative.`);
     }
