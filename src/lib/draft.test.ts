@@ -57,10 +57,20 @@ describe("validateDraft", () => {
     );
   });
 
-  it("rejects a player who is not matched to anyone", () => {
+  // Reaching this needs the dropdown cleared by hand, since an unrecognised handle
+  // arrives already set to join the roster.
+  it("asks who a player is when the roster match has been cleared", () => {
     const d = draft();
     d.teams[0].players[0].playerId = undefined;
-    expect(validateDraft(d).join()).toContain("not matched to anyone");
+    expect(validateDraft(d).join()).toContain("Say who ana is");
+  });
+
+  it("does not also complain about the roster match on a blank row", () => {
+    const d = draft();
+    d.teams[0].players[0].name = "";
+    d.teams[0].players[0].playerId = undefined;
+    expect(validateDraft(d).filter((e) => e.includes("Say who"))).toEqual([]);
+    expect(validateDraft(d)).toContain("Every row needs a name.");
   });
 
   it("accepts a player queued to be added to the roster", () => {

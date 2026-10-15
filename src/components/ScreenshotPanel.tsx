@@ -53,11 +53,12 @@ async function downscaleToJpegBase64(file: File): Promise<string> {
 
 export default function ScreenshotPanel({
   passphrase,
-  playedAt,
+  reading,
   onExtracted,
 }: {
   passphrase: string;
-  playedAt: string;
+  /** True while nothing has been read yet, which is when this panel is the whole page. */
+  reading: boolean;
   onExtracted: (draft: DraftMatch, extraction: Extraction) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -65,6 +66,7 @@ export default function ScreenshotPanel({
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   async function handleFile(file: File) {
     setStatus("reading");
@@ -75,7 +77,7 @@ export default function ScreenshotPanel({
       const base64 = await downscaleToJpegBase64(file);
       setPreview(`data:image/jpeg;base64,${base64}`);
 
-      const result = await extractScoreboard({ passphrase, imageBase64: base64, playedAt });
+      const result = await extractScoreboard({ passphrase, imageBase64: base64 });
       if (!result.ok) {
         setErrors(result.errors);
         return;
@@ -93,18 +95,15 @@ export default function ScreenshotPanel({
     }
   }
 
+  const busy = status === "reading";
+  const locked = busy || !passphrase;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Start from a screenshot</CardTitle>
-        <span className="text-xs uppercase tracking-wider text-gray-500">optional</span>
+        <CardTitle>{reading ? "Upload the scoreboard" : "The screenshot"}</CardTitle>
       </CardHeader>
       <CardBody className="space-y-4">
-        <p className="text-sm text-gray-400">
-          Upload the end of match scoreboard and the numbers get filled in for you. Check them
-          before you save. A mid match shot works too.
-        </p>
-
         <input
           ref={input}
           type="file"
@@ -119,19 +118,56 @@ export default function ScreenshotPanel({
           }}
         />
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* The dropzone shrinks to a swap button once a scoreboard has been read, so the
+            thing to review is what fills the page from then on. */}
+        {reading ? (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!locked) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file && !locked) handleFile(file);
+            }}
+            className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+              dragging ? "border-accent bg-accent/5" : "border-white/15"
+            }`}
+          >
+            <p className="font-heading text-base font-bold uppercase tracking-wider text-white">
+              {busy ? "Reading the scoreboard" : "Drop the end of match scoreboard here"}
+            </p>
+            <p className="mt-2 text-sm text-gray-400">
+              Every number gets filled in for you, players included. A mid match shot works
+              too. You just check it over before saving.
+            </p>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => input.current?.click()}
+              className="mt-5 rounded-lg bg-accent px-5 py-2.5 font-heading text-sm font-bold uppercase tracking-wider text-ink disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy ? "Working on it" : "Choose a screenshot"}
+            </button>
+            {!passphrase && (
+              <p className="mt-3 text-xs text-gray-500">
+                Enter your name and the passphrase above first.
+              </p>
+            )}
+          </div>
+        ) : (
           <button
             type="button"
-            disabled={status === "reading" || !passphrase}
+            disabled={locked}
             onClick={() => input.current?.click()}
-            className="rounded-lg border border-accent/40 px-4 py-2 font-heading text-sm font-bold uppercase tracking-wider text-accent disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 hover:border-accent/30 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {status === "reading" ? "Reading the scoreboard" : "Choose a screenshot"}
+            {busy ? "Reading the scoreboard" : "Read a different screenshot"}
           </button>
-          {!passphrase && (
-            <span className="text-xs text-gray-500">Enter the passphrase first.</span>
-          )}
-        </div>
+        )}
 
         {preview && (
           // eslint-disable-next-line @next/next/no-img-element
