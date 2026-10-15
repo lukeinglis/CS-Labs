@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { extractScoreboard } from "@/app/submit/actions";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import type { DraftMatch } from "@/lib/draft";
+import { readPhotoTakenAt } from "@/lib/exif";
 
 /**
  * Anthropic downsamples anything longer than this on its longest edge, so sending more
@@ -17,7 +18,25 @@ export type Extraction = {
   extractionModel: string;
   /** The draft exactly as the model read it, kept to diff against on save. */
   original: DraftMatch;
+  /** When the camera says the photo was taken, or null if it carried no date. */
+  photoTakenAt: string | null;
 };
+
+/**
+ * EXIF sits in the first marker segment, so a slice off the front is enough and a 5MB
+ * photo never has to be held in memory twice. It has to be read from the file the user
+ * picked: the canvas downscale re-encodes the pixels and drops every tag with them.
+ */
+const EXIF_SCAN_BYTES = 256 * 1024;
+
+async function readTakenAt(file: File): Promise<string | null> {
+  try {
+    const head = await file.slice(0, EXIF_SCAN_BYTES).arrayBuffer();
+    return readPhotoTakenAt(new Uint8Array(head));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Resizes in the browser. This has to happen client side: a server action body caps at
@@ -74,6 +93,7 @@ export default function ScreenshotPanel({
     setWarnings([]);
 
     try {
+      const takenAt = await readTakenAt(file);
       const base64 = await downscaleToJpegBase64(file);
       setPreview(`data:image/jpeg;base64,${base64}`);
 
@@ -87,6 +107,7 @@ export default function ScreenshotPanel({
         blobUrl: result.blobUrl,
         extractionModel: result.extractionModel,
         original: result.draft,
+        photoTakenAt: takenAt,
       });
     } catch (err) {
       setErrors([(err as Error).message]);

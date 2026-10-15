@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { submitMatch } from "@/app/submit/actions";
 import ScreenshotPanel, { type Extraction } from "@/components/ScreenshotPanel";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
+import { Badge, Card, CardBody, CardHeader, CardTitle, SideBadge } from "@/components/ui";
 import {
   NEW_PLAYER,
   roundsPlayed,
@@ -23,6 +23,58 @@ const FIELD =
   "rounded-lg border border-white/10 bg-ink px-3 py-2 text-sm text-white focus:border-accent/50 focus:outline-none";
 const LABEL = "block text-xs font-semibold uppercase tracking-wider text-gray-500";
 
+/**
+ * The passphrase gates submitting a match and nothing else, it is shared by the whole
+ * group, and the alternative is typing it on a phone after every game. Remembering it
+ * per device is the right trade, and the form says so rather than doing it silently.
+ */
+const REMEMBERED_NAME = "cs-labs.submittedBy";
+const REMEMBERED_PASSPHRASE = "cs-labs.passphrase";
+
+/** Same-tab writes do not raise a storage event, so subscribers are tracked by hand. */
+const listeners = new Set<() => void>();
+
+function remember(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Private browsing can refuse to store. Typing it again is a smaller problem than
+    // the page failing, so this is dropped rather than surfaced.
+  }
+  for (const notify of listeners) notify();
+}
+
+/**
+ * Reads through to localStorage via useSyncExternalStore rather than an effect, so the
+ * server renders a blank field and the client swaps in the stored value during hydration
+ * without a mismatch.
+ */
+function useRemembered(key: string): [string, (next: string) => void] {
+  const subscribe = useCallback((onChange: () => void) => {
+    listeners.add(onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      listeners.delete(onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+
+  const value = useSyncExternalStore(
+    subscribe,
+    () => {
+      try {
+        return window.localStorage.getItem(key) ?? "";
+      } catch {
+        return "";
+      }
+    },
+    () => ""
+  );
+
+  const set = useCallback((next: string) => remember(key, next), [key]);
+  return [value, set];
+}
+
 function emptyLine(): DraftStatLine {
   return { name: "", kills: 0, assists: 0, deaths: 0, damage: 0 };
 }
@@ -37,6 +89,12 @@ function toLocalInput(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours()
   )}:${pad(date.getMinutes())}`;
+}
+
+function readableDate(localInput: string): string {
+  const parsed = new Date(localInput);
+  if (Number.isNaN(parsed.getTime())) return "Not set";
+  return parsed.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 /**
@@ -61,8 +119,8 @@ export default function SubmitClient({
   aliases: Record<string, string>;
   maps: readonly string[];
 }) {
-  const [submittedBy, setSubmittedBy] = useState("");
-  const [passphrase, setPassphrase] = useState("");
+  const [submittedBy, setSubmittedBy] = useRemembered(REMEMBERED_NAME);
+  const [passphrase, setPassphrase] = useRemembered(REMEMBERED_PASSPHRASE);
 
   /**
    * Null until there is something to review. A screenshot is the way in, so there is no
@@ -71,6 +129,13 @@ export default function SubmitClient({
    */
   const [draft, setDraft] = useState<DraftMatch | null>(null);
 
+  /**
+   * An extracted scoreboard is shown as a scoreboard, not as fifty input boxes. Editing
+   * is a thing you opt into when something is actually wrong, which for a clean read is
+   * never. Typing one in by hand starts here already open.
+   */
+  const [editing, setEditing] = useState(false);
+
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [errors, setErrors] = useState<string[]>([]);
   const [duplicate, setDuplicate] = useState(false);
@@ -78,6 +143,10 @@ export default function SubmitClient({
   const [extraction, setExtraction] = useState<Extraction | null>(null);
 
   const problems = useMemo(() => (draft ? validateDraft(draft) : []), [draft]);
+  const names = useMemo(
+    () => new Map(roster.map((p) => [p.playerId, p.displayName])),
+    [roster]
+  );
 
   function updateTeam(index: 0 | 1, patch: Partial<DraftTeam>) {
     setDraft((d) => {
@@ -163,6 +232,7 @@ export default function SubmitClient({
               type="button"
               onClick={() => {
                 setDraft(null);
+                setEditing(false);
                 setExtraction(null);
                 setSavedId(null);
                 setStatus("idle");
@@ -182,6 +252,9 @@ export default function SubmitClient({
       <Card>
         <CardHeader>
           <CardTitle>Who is submitting</CardTitle>
+          <span className="text-xs uppercase tracking-wider text-gray-500">
+            remembered on this device
+          </span>
         </CardHeader>
         <CardBody className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -216,9 +289,14 @@ export default function SubmitClient({
         reading={!draft}
         onExtracted={(extracted, meta) => {
           setExtraction(meta);
-          // The server leaves the timestamp blank because only the browser knows the
-          // timezone. It is not part of the extraction diff, so filling it is not an edit.
-          setDraft({ ...extracted, playedAt: toLocalInput(new Date()) });
+          // A scoreboard carries no date of its own, so the camera's is the best one
+          // there is. Falling back to now is right for the usual case of uploading
+          // straight after the game.
+          setDraft({
+            ...extracted,
+            playedAt: meta.photoTakenAt ?? toLocalInput(new Date()),
+          });
+          setEditing(false);
           setErrors([]);
         }}
       />
@@ -228,7 +306,10 @@ export default function SubmitClient({
           No screenshot handy?{" "}
           <button
             type="button"
-            onClick={() => setDraft(blankDraft())}
+            onClick={() => {
+              setDraft(blankDraft());
+              setEditing(true);
+            }}
             className="font-semibold text-gray-300 underline decoration-white/20 underline-offset-4 hover:text-accent"
           >
             Type the scoreboard in by hand
@@ -236,71 +317,94 @@ export default function SubmitClient({
         </p>
       )}
 
+      {draft && !editing && (
+        <MatchSummary
+          draft={draft}
+          photoTakenAt={extraction?.photoTakenAt ?? null}
+          fromScreenshot={!!extraction}
+        />
+      )}
+
+      {draft && editing && (
+        <Card>
+          <CardHeader>
+            <CardTitle>The match</CardTitle>
+            <span className="text-xs uppercase tracking-wider text-gray-500">
+              {roundsPlayed(draft)} rounds
+            </span>
+          </CardHeader>
+          <CardBody className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={LABEL} htmlFor="map">
+                Map
+              </label>
+              <select
+                id="map"
+                value={draft.map}
+                onChange={(e) => setDraft((d) => d && { ...d, map: e.target.value })}
+                className={`mt-2 w-full ${FIELD}`}
+              >
+                {/* An extraction can name a map the config does not list, and silently
+                    snapping it to the first option would file the match under Mirage. */}
+                {!maps.includes(draft.map) && (
+                  <option value={draft.map}>{draft.map || "Which map?"}</option>
+                )}
+                {maps.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="played-at">
+                Played
+              </label>
+              <input
+                id="played-at"
+                type="datetime-local"
+                value={draft.playedAt}
+                onChange={(e) => setDraft((d) => d && { ...d, playedAt: e.target.value })}
+                className={`mt-2 w-full ${FIELD}`}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       {draft && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>The match</CardTitle>
-              <span className="text-xs uppercase tracking-wider text-gray-500">
-                {roundsPlayed(draft)} rounds
-              </span>
-            </CardHeader>
-            <CardBody className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className={LABEL} htmlFor="map">
-                  Map
-                </label>
-                <select
-                  id="map"
-                  value={draft.map}
-                  onChange={(e) => setDraft((d) => d && { ...d, map: e.target.value })}
-                  className={`mt-2 w-full ${FIELD}`}
-                >
-                  {/* An extraction can name a map the config does not list, and silently
-                      snapping it to the first option would file the match under Mirage. */}
-                  {!maps.includes(draft.map) && (
-                    <option value={draft.map}>{draft.map || "Which map?"}</option>
-                  )}
-                  {maps.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={LABEL} htmlFor="played-at">
-                  Played
-                </label>
-                <input
-                  id="played-at"
-                  type="datetime-local"
-                  value={draft.playedAt}
-                  onChange={(e) => setDraft((d) => d && { ...d, playedAt: e.target.value })}
-                  className={`mt-2 w-full ${FIELD}`}
-                />
-              </div>
-            </CardBody>
-          </Card>
-
           <div className="grid gap-6 lg:grid-cols-2">
-            {([0, 1] as const).map((i) => (
-              <TeamEditor
-                key={i}
-                team={draft.teams[i]}
-                roster={roster}
-                onTeamChange={(patch) => updateTeam(i, patch)}
-                onLineChange={(row, patch) => updateLine(i, row, patch)}
-                onAdd={() =>
-                  updateTeam(i, { players: [...draft.teams[i].players, emptyLine()] })
-                }
-                onRemove={(row) =>
-                  updateTeam(i, {
-                    players: draft.teams[i].players.filter((_, r) => r !== row),
-                  })
-                }
-              />
-            ))}
+            {([0, 1] as const).map((i) =>
+              editing ? (
+                <TeamEditor
+                  key={i}
+                  team={draft.teams[i]}
+                  roster={roster}
+                  onTeamChange={(patch) => updateTeam(i, patch)}
+                  onLineChange={(row, patch) => updateLine(i, row, patch)}
+                  onAdd={() =>
+                    updateTeam(i, { players: [...draft.teams[i].players, emptyLine()] })
+                  }
+                  onRemove={(row) =>
+                    updateTeam(i, {
+                      players: draft.teams[i].players.filter((_, r) => r !== row),
+                    })
+                  }
+                />
+              ) : (
+                <TeamReview
+                  key={i}
+                  team={draft.teams[i]}
+                  names={names}
+                  rounds={roundsPlayed(draft)}
+                  isWinner={
+                    draft.teams[i].roundsWon >
+                    draft.teams[1 - i].roundsWon
+                  }
+                />
+              )
+            )}
           </div>
 
           {(problems.length > 0 || errors.length > 0) && (
@@ -320,7 +424,14 @@ export default function SubmitClient({
               onClick={() => save(false)}
               className="rounded-lg bg-accent px-5 py-2.5 font-heading text-sm font-bold uppercase tracking-wider text-ink disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {status === "saving" ? "Saving" : "Save match"}
+              {status === "saving" ? "Saving" : "Looks right, save it"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing((e) => !e)}
+              className="rounded-lg border border-white/10 px-5 py-2.5 font-heading text-sm font-bold uppercase tracking-wider text-gray-300 hover:border-accent/30 hover:text-accent"
+            >
+              {editing ? "Done editing" : "Something is wrong"}
             </button>
             {duplicate && (
               <button
@@ -336,6 +447,137 @@ export default function SubmitClient({
         </>
       )}
     </div>
+  );
+}
+
+/** The map, the date and where the date came from, since a wrong date mis-files a match. */
+function MatchSummary({
+  draft,
+  photoTakenAt,
+  fromScreenshot,
+}: {
+  draft: DraftMatch;
+  photoTakenAt: string | null;
+  fromScreenshot: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{draft.map || "Which map?"}</CardTitle>
+        <span className="text-xs uppercase tracking-wider text-gray-500">
+          {roundsPlayed(draft)} rounds
+        </span>
+      </CardHeader>
+      <CardBody className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-sm text-gray-300">{readableDate(draft.playedAt)}</span>
+        <span className="text-xs text-gray-500">
+          {photoTakenAt
+            ? "taken from the photo"
+            : fromScreenshot
+              ? "the photo carried no date, so this is now"
+              : "set to now"}
+        </span>
+      </CardBody>
+    </Card>
+  );
+}
+
+/** The extracted scoreboard shown as a scoreboard, so checking it is reading, not auditing. */
+function TeamReview({
+  team,
+  names,
+  rounds,
+  isWinner,
+}: {
+  team: DraftTeam;
+  names: Map<string, string>;
+  rounds: number;
+  isWinner: boolean;
+}) {
+  const ordered = team.players.slice().sort((a, b) => b.kills - a.kills);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <SideBadge side={team.startingSide} />
+          <CardTitle>Team {team.label}</CardTitle>
+          {isWinner && <Badge tone="win">Won</Badge>}
+        </div>
+        <span className="font-heading text-2xl font-bold text-white">{team.roundsWon}</span>
+      </CardHeader>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[420px]">
+          <thead>
+            <tr className="border-b border-white/10 text-left">
+              <th
+                scope="col"
+                className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500"
+              >
+                Player
+              </th>
+              {["K", "D", "A", "HS%", "DMG"].map((label) => (
+                <th
+                  key={label}
+                  scope="col"
+                  className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-500"
+                >
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ordered.map((line, row) => {
+              const isNew = line.playerId === NEW_PLAYER;
+              const known = line.playerId ? names.get(line.playerId) : undefined;
+              return (
+                <tr key={row} className="border-b border-white/5 last:border-0">
+                  <td className="px-5 py-2.5 text-sm">
+                    <span className="font-medium text-white">{line.name || "Unnamed"}</span>
+                    {/* Only worth showing when the roster calls them something else,
+                        which is the case a reviewer should actually check. */}
+                    {known && known !== line.name && (
+                      <span className="ml-2 text-xs text-gray-500">{known}</span>
+                    )}
+                    {isNew && (
+                      <span className="ml-2">
+                        <Badge tone="accent" title="Joins the roster when this match is saved">
+                          New
+                        </Badge>
+                      </span>
+                    )}
+                    {!line.playerId && (
+                      <span className="ml-2">
+                        <Badge tone="loss">Who?</Badge>
+                      </span>
+                    )}
+                    {line.joinedLate && (
+                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                        Late
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.kills}</td>
+                  <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.deaths}</td>
+                  <td className="px-3 py-2.5 text-center text-sm text-gray-300">
+                    {line.assists}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-sm text-gray-400">
+                    {line.headshotPct ?? "-"}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-sm text-gray-300">{line.damage}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="px-5 py-3 text-xs text-gray-500">
+        {(team.players.reduce((n, l) => n + l.damage, 0) / Math.max(rounds, 1)).toFixed(0)}{" "}
+        damage per round across the team.
+      </p>
+    </Card>
   );
 }
 
