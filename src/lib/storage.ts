@@ -104,6 +104,25 @@ export type DuplicateHit = {
   confidence: "exact" | "likely";
 };
 
+/**
+ * A voided match is not a duplicate, which is what makes void-and-resubmit a usable
+ * correction: the mis-recorded game stops counting and the fixed one takes its place.
+ *
+ * Without this, the loose fingerprint would block the fix. It is map, day, score and
+ * roster, so correcting a stat line leaves it identical, and the submitter would be told
+ * their match was "already recorded" and pointed at a record that explicitly does not
+ * count. Every other reader of the match log already filters voided matches out; this
+ * was the one that did not.
+ *
+ * A fingerprint pointing at a match that is no longer stored is treated the same way,
+ * since `mgetAll` drops missing keys: nothing to collide with is nothing to warn about.
+ *
+ * The accepted cost is that resubmitting a scoreboard byte-identical to a voided one
+ * makes a second record rather than suggesting a restore. Blocking that would also block
+ * correcting a match whose stat lines were right and whose date was wrong, which the
+ * exact fingerprint cannot tell apart, and the void reason on the old record explains
+ * itself to anyone reading back.
+ */
 export async function findDuplicate(
   match: MatchRecord
 ): Promise<DuplicateHit | null> {
@@ -112,9 +131,18 @@ export async function findDuplicate(
     db.get<string>(`fp-exact:${exactFingerprint(match)}`),
     db.get<string>(`fp-loose:${looseFingerprint(match)}`),
   ]);
-  if (exact && exact !== match.id) return { matchId: exact, confidence: "exact" };
-  if (loose && loose !== match.id) return { matchId: loose, confidence: "likely" };
-  return null;
+
+  // Exact is considered first, so a true resubmission is reported as one.
+  const hits: DuplicateHit[] = [];
+  if (exact && exact !== match.id) hits.push({ matchId: exact, confidence: "exact" });
+  if (loose && loose !== match.id && loose !== exact) {
+    hits.push({ matchId: loose, confidence: "likely" });
+  }
+  if (hits.length === 0) return null;
+
+  const found = await mgetAll<MatchRecord>(hits.map((h) => `match:${h.matchId}`));
+  const live = new Set(found.filter((m) => !m.voided).map((m) => m.id));
+  return hits.find((h) => live.has(h.matchId)) ?? null;
 }
 
 export async function saveMatch(match: MatchRecord): Promise<void> {
