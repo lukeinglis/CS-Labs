@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLeaderboardPage() {
   // The layout already proved this request is admin, so skip the second cookie read.
-  const { ranked, matches } = await loadRankings({ assumeAdmin: true });
+  const { ranked, matches } = await loadRankings({ assumeAccess: true });
 
   // The players still go through the public projection and the performance numbers
   // travel in their own map, so the one path to a perf value on this page is the
@@ -44,7 +44,7 @@ export default async function AdminLeaderboardPage() {
             <LeaderboardTable
               players={players}
               performance={performance}
-              playerBase="/admin/players"
+              playerBase="/stats/players"
             />
           </Card>
         )}

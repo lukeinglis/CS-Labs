@@ -4,10 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+/**
+ * Player Stats is listed for everyone, signed in or not. The passphrase is the gate,
+ * not the link: people in the league have to be able to find the thing, and hiding it
+ * only meant nobody knew it existed. An unsigned visitor who clicks it lands on a form
+ * that explains what it is and says to ask in the group.
+ */
 const NAV_ITEMS = [
   { href: "/", label: "Home" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/matches", label: "Matches" },
+  { href: "/stats", label: "Player Stats" },
   { href: "/balance", label: "Balance Teams" },
 ] as const;
 

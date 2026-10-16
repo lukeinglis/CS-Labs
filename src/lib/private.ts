@@ -6,7 +6,7 @@
  * folded into a match or a player. That is deliberate. A component whose match type
  * has nowhere to put a kill count cannot leak one, so the only way a stat reaches the
  * browser is a caller explicitly passing one of these maps, and every caller that does
- * is a route under `/admin`.
+ * is a route under `/stats`.
  */
 import "server-only";
 

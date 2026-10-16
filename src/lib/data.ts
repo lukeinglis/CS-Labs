@@ -8,7 +8,7 @@ import {
   type PublicRating,
 } from "./public";
 import { computeRatings } from "./ranking";
-import { isAdmin } from "./session";
+import { canSeeStats } from "./session";
 import { getMatches, getPlayers, isStoreConfigured } from "./storage";
 import type { MatchRecord, Player, PlayerRating } from "./types";
 
@@ -45,20 +45,23 @@ export async function loadPlayers(): Promise<Player[]> {
 }
 
 /**
- * The full read model, individual performance included. Private.
+ * The full read model, individual performance included. For people in the league.
  *
- * The admin check lives here rather than only in the pages, because a page that
- * forgets to check is a privacy bug and a loader that forgets to refuse is a
- * single point to audit. Callers that have already checked pass `assumeAdmin` so a
- * route does not pay for the cookie read twice.
+ * The check lives here rather than only in the pages, because a page that forgets to
+ * check is a privacy bug and a loader that forgets to refuse is a single point to
+ * audit. Callers that have already checked pass `assumeAccess` so a route does not
+ * pay for the cookie read twice.
+ *
+ * This gate is about seeing the numbers, not about changing anything. Voiding a match
+ * is a separate secret, checked separately in the action that does it.
  */
 export async function loadRankings({
-  assumeAdmin = false,
-}: { assumeAdmin?: boolean } = {}): Promise<{
+  assumeAccess = false,
+}: { assumeAccess?: boolean } = {}): Promise<{
   ranked: RankedPlayer[];
   matches: MatchRecord[];
 }> {
-  if (!assumeAdmin && !(await isAdmin())) {
+  if (!assumeAccess && !(await canSeeStats())) {
     throw new Error("loadRankings is private; use loadPublicRankings.");
   }
 

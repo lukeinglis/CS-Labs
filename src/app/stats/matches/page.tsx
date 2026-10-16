@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminMatchesPage() {
   const [{ matches }, players] = await Promise.all([
-    loadRankings({ assumeAdmin: true }),
+    loadRankings({ assumeAccess: true }),
     loadPlayers(),
   ]);
   const names = new Map(players.map((p) => [p.id, p.displayName]));
@@ -38,7 +38,7 @@ export default async function AdminMatchesPage() {
           <MatchList
             matches={matches.map(toPublicMatch)}
             names={names}
-            matchBase="/admin/matches"
+            matchBase="/stats/matches"
           />
         )}
       </Container>

@@ -16,11 +16,18 @@ const ACTOR = "admin";
 const MAX_REASON = 200;
 
 /**
- * A Server Action is a POST endpoint on the page that renders it, reachable by anyone
- * who can send the request. Next's own guidance is explicit that render-time gating is
- * not a security boundary, so the `/admin` layout redirect does nothing for this: the
- * check has to be here. It throws rather than returning quietly, because a missed
- * authorization on something that rewrites every rating should fail loudly.
+ * `isAdmin`, not `canSeeStats`. Everyone in the league can read the page this action
+ * lives on, so the two have to be different secrets: gating a void on the passphrase
+ * that is shared with every player would be the same as not gating it.
+ *
+ * And the check has to be here rather than above. A Server Action is a POST endpoint
+ * on the page that renders it, reachable by anyone who can send the request, and
+ * Next's own guidance is explicit that render-time gating is not a security boundary.
+ * The `/stats` layout redirect lets league members through by design, and not
+ * rendering the form leaves the endpoint exactly as reachable as before.
+ *
+ * It throws rather than returning quietly, because a missed authorization on something
+ * that rewrites every rating should fail loudly.
  */
 async function requireAdmin(): Promise<void> {
   if (!(await isAdmin())) {
@@ -38,19 +45,19 @@ function refresh(matchId: string): void {
     "/leaderboard",
     "/matches",
     "/balance",
-    "/admin",
-    "/admin/matches",
+    "/stats",
+    "/stats/matches",
   ]) {
     revalidatePath(path);
   }
 
   revalidatePath(`/matches/${matchId}`);
-  revalidatePath(`/admin/matches/${matchId}`);
+  revalidatePath(`/stats/matches/${matchId}`);
 
   // Every player page carries a record and a match history, and any of them may include
   // this match. A route pattern plus `page` covers the lot without enumerating ids.
   revalidatePath("/players/[id]", "page");
-  revalidatePath("/admin/players/[id]", "page");
+  revalidatePath("/stats/players/[id]", "page");
 }
 
 export async function voidMatchAction(formData: FormData): Promise<void> {
@@ -63,14 +70,14 @@ export async function voidMatchAction(formData: FormData): Promise<void> {
   // page to send it back to.
   if (!id) throw new Error("No match id was supplied.");
 
-  if (!reason) redirect(`/admin/matches/${id}?error=reason`);
-  if (reason.length > MAX_REASON) redirect(`/admin/matches/${id}?error=long`);
+  if (!reason) redirect(`/stats/matches/${id}?error=reason`);
+  if (reason.length > MAX_REASON) redirect(`/stats/matches/${id}?error=long`);
 
   const voided = await voidMatch(id, reason, ACTOR);
-  if (!voided) redirect(`/admin/matches/${id}?error=missing`);
+  if (!voided) redirect(`/stats/matches/${id}?error=missing`);
 
   refresh(id);
-  redirect(`/admin/matches/${id}?done=voided`);
+  redirect(`/stats/matches/${id}?done=voided`);
 }
 
 export async function restoreMatchAction(formData: FormData): Promise<void> {
@@ -80,8 +87,8 @@ export async function restoreMatchAction(formData: FormData): Promise<void> {
   if (!id) throw new Error("No match id was supplied.");
 
   const restored = await restoreMatch(id);
-  if (!restored) redirect(`/admin/matches/${id}?error=missing`);
+  if (!restored) redirect(`/stats/matches/${id}?error=missing`);
 
   refresh(id);
-  redirect(`/admin/matches/${id}?done=restored`);
+  redirect(`/stats/matches/${id}?done=restored`);
 }
