@@ -1,5 +1,4 @@
 import { predictWin } from "openskill";
-import type { MatchRecord } from "./types";
 
 export type BalancePlayer = {
   playerId: string;
@@ -41,9 +40,20 @@ export function pairKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
+/**
+ * The only parts of a match this file reads. Stated structurally rather than as
+ * `MatchRecord` so a public, stat-stripped match is accepted too: who was on which
+ * team is all pair counting needs, and the balancer runs on the public side.
+ */
+type RosterOnly = {
+  playedAt: string;
+  voided?: boolean;
+  teams: readonly { players: readonly { playerId: string }[] }[];
+};
+
 /** Counts how often each pair of players has been on the same team. */
 export function buildPairCounts(
-  matches: MatchRecord[],
+  matches: readonly RosterOnly[],
   recentMatches?: number
 ): Map<string, number> {
   const counts = new Map<string, number>();

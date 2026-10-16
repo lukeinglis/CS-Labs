@@ -11,12 +11,15 @@ import {
   SideBadge,
   StatTile,
 } from "@/components/ui";
-import { loadPlayers, loadRankings } from "@/lib/data";
+import { loadPlayers, loadPublicRankings } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [{ ranked, matches }, players] = await Promise.all([loadRankings(), loadPlayers()]);
+  const [{ ranked, matches }, players] = await Promise.all([
+    loadPublicRankings(),
+    loadPlayers(),
+  ]);
   const qualified = ranked.filter((p) => !p.provisional);
   const topFive = qualified.slice(0, 5);
   const recent = matches.slice(-5).reverse();
@@ -88,12 +91,17 @@ export default async function HomePage() {
                     >
                       {i + 1}
                     </span>
-                    <span className="flex-1 font-medium text-white">{p.displayName}</span>
+                    <Link
+                      href={`/players/${p.playerId}`}
+                      className="flex-1 font-medium text-white transition-colors hover:text-accent"
+                    >
+                      {p.displayName}
+                    </Link>
                     <span className="text-xs text-gray-500">
                       {p.wins}-{p.losses}-{p.draws}
                     </span>
                     <span className="font-heading text-lg font-bold text-accent">
-                      {Math.round(p.overall)}
+                      {Math.round(p.teamRating)}
                     </span>
                   </li>
                 ))}
@@ -161,22 +169,22 @@ export default async function HomePage() {
           <div className="grid gap-5 px-5 py-5 sm:grid-cols-3">
             <div>
               <h3 className="font-heading text-sm font-bold uppercase tracking-wide text-ct">
-                Team result leads
+                Only the result counts
               </h3>
               <p className="mt-1 text-sm text-gray-400">
-                Winning moves you up and losing moves you down, always. A 13-2 counts for
-                more than a 13-11, and beating a full team while short-handed counts for
-                more still.
+                Winning moves you up and losing moves you down. A 13-2 counts for more than
+                a 13-11, and beating a full team while short-handed counts for more still.
+                No individual stat touches the number.
               </p>
             </div>
             <div>
               <h3 className="font-heading text-sm font-bold uppercase tracking-wide text-accent">
-                Your game adjusts it
+                Who you beat matters
               </h3>
               <p className="mt-1 text-sm text-gray-400">
-                Kills, assists, deaths and ADR are measured against the rest of that lobby,
-                then used to size the move. Carrying a loss can claw you back to break-even,
-                but never into a gain.
+                Beating the stacked team is worth more than beating the stacked team&rsquo;s
+                opponents, which is why the rating is a better read than a raw win
+                percentage and why the balancer trusts it.
               </p>
             </div>
             <div>
