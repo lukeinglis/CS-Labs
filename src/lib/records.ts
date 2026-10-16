@@ -157,6 +157,103 @@ export function versusEveryone(
   );
 }
 
+/**
+ * Every player's record against every other, as `matrix.get(me)?.get(them)`.
+ *
+ * One pass fills the whole grid, because a single match answers the question for every
+ * pairing across it at once. The two halves are mirror images by construction: if I beat
+ * you then you lost to me, so only one of the two cells needs writing per ordered pair
+ * and the loop over both team indices supplies the other.
+ *
+ * Returned as nested maps rather than a dense array so a roster that has never shared a
+ * lobby stays absent instead of being filled with zeroes a caller has to tell apart from
+ * a real 0-0-0.
+ */
+export function againstMatrix(
+  matches: PublicMatch[]
+): Map<string, Map<string, Record>> {
+  const out = new Map<string, Map<string, Record>>();
+
+  const cell = (me: string, them: string): Record => {
+    let row = out.get(me);
+    if (!row) {
+      row = new Map<string, Record>();
+      out.set(me, row);
+    }
+    let r = row.get(them);
+    if (!r) {
+      r = blank();
+      row.set(them, r);
+    }
+    return r;
+  };
+
+  for (const match of live(matches)) {
+    for (const i of [0, 1] as const) {
+      const outcome = outcomeFor(match, i);
+      for (const me of match.teams[i].players) {
+        for (const them of match.teams[1 - i].players) {
+          add(cell(me.playerId, them.playerId), outcome);
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+/** One slice of the match log. An absent field means "do not narrow on this one". */
+export type Slice = { map?: string; teamSize?: string };
+
+/**
+ * Narrows the match log to a slice. Team size goes through `teamSizeKey` rather than
+ * being compared raw, so asking for "3v4" and asking for "4v3" select the same games.
+ *
+ * Voided matches are dropped here as well, which makes the count of what comes back
+ * safe to show as "showing N matches". Everything downstream filters them too, so this
+ * is belt and braces rather than the only guard.
+ */
+export function matchesIn(matches: PublicMatch[], slice: Slice): PublicMatch[] {
+  const wanted = slice.teamSize ? normalizeSizeKey(slice.teamSize) : undefined;
+  return live(matches).filter(
+    (m) =>
+      (!slice.map || m.map === slice.map) &&
+      (!wanted || teamSizeKey(m) === wanted)
+  );
+}
+
+/**
+ * Smaller side first, matching `teamSizeKey`. The controls only ever offer keys that
+ * came from `teamSizesPlayed` and are already in that form, but a slice is the kind of
+ * thing that ends up in a URL, and "4v3" typed by hand should not quietly match nothing.
+ */
+function normalizeSizeKey(key: string): string {
+  const [a, b] = key.split("v").map((n) => Number.parseInt(n, 10));
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return key;
+  return a <= b ? `${a}v${b}` : `${b}v${a}`;
+}
+
+/**
+ * The maps and lobby shapes that actually appear, most played first, for building the
+ * slice controls. Derived from the log rather than from a hardcoded map pool, so a map
+ * the group has never touched never shows up as an empty option.
+ */
+export function mapsPlayed(matches: PublicMatch[]): string[] {
+  return byFrequency(live(matches).map((m) => m.map));
+}
+
+export function teamSizesPlayed(matches: PublicMatch[]): string[] {
+  return byFrequency(live(matches).map(teamSizeKey));
+}
+
+function byFrequency(values: string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([v]) => v);
+}
+
 /** Current run of the same result, as a signed count: +3 is three wins, -2 two losses. */
 export function currentStreak(matches: PublicMatch[], playerId: string): number {
   const played = live(matches)
