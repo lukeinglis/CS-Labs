@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function AdminPlayerPage({ params }: Props) {
   const { id } = await params;
   const [{ ranked, matches }, players] = await Promise.all([
-    loadRankings({ assumeAdmin: true }),
+    loadRankings({ assumeAccess: true }),
     loadPlayers(),
   ]);
 
@@ -41,8 +41,8 @@ export default async function AdminPlayerPage({ params }: Props) {
         overall: player.overall,
         perMatch: statHistoryFor(matches, id),
       }}
-      playerBase="/admin/players"
-      matchBase="/admin/matches"
+      playerBase="/stats/players"
+      matchBase="/stats/matches"
     />
   );
 }

@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * A Server Action is a POST endpoint on the page that renders it, so the `/admin` layout
+ * A Server Action is a POST endpoint on the page that renders it, so the `/stats` layout
  * redirect does nothing to protect these. The test that matters is therefore not "does a
- * non-admin get an error" but "does a non-admin reach the store at all": the refusal has
- * to happen before the mutation, not alongside it.
+ * caller without the admin secret get an error" but "does one reach the store at all":
+ * the refusal has to happen before the mutation, not alongside it.
+ *
+ * `canSeeStats` is mocked true throughout, because that is the realistic case now.
+ * Every league member can read this page, so a reader is the default and the admin
+ * secret is the only thing separating them from voiding a match.
  */
 let admin = false;
 
@@ -12,7 +16,10 @@ const voidMatch = vi.fn(async (id: string) => ({ id, voided: true }));
 const restoreMatch = vi.fn(async (id: string) => ({ id }));
 const revalidatePath = vi.fn();
 
-vi.mock("@/lib/session", () => ({ isAdmin: async () => admin }));
+vi.mock("@/lib/session", () => ({
+  isAdmin: async () => admin,
+  canSeeStats: async () => true,
+}));
 vi.mock("@/lib/storage", () => ({
   voidMatch: (...args: unknown[]) => voidMatch(...(args as [string])),
   restoreMatch: (...args: unknown[]) => restoreMatch(...(args as [string])),
@@ -58,21 +65,21 @@ beforeEach(() => {
 });
 
 describe("the void gate", () => {
-  it("refuses a signed-out caller before touching the store", async () => {
+  it("refuses a league member before touching the store", async () => {
     await expect(
       voidMatchAction(form({ matchId: "m-1", reason: "wrong map" }))
     ).rejects.toThrow(/admin only/i);
     expect(voidMatch).not.toHaveBeenCalled();
   });
 
-  it("refuses a signed-out caller for a restore too", async () => {
+  it("refuses a league member for a restore too", async () => {
     await expect(restoreMatchAction(form({ matchId: "m-1" }))).rejects.toThrow(
       /admin only/i
     );
     expect(restoreMatch).not.toHaveBeenCalled();
   });
 
-  it("does not leak whether the match exists to a signed-out caller", async () => {
+  it("does not leak whether the match exists to a league member", async () => {
     await expect(
       voidMatchAction(form({ matchId: "nonsense", reason: "x" }))
     ).rejects.toThrow(/admin only/i);
@@ -87,20 +94,20 @@ describe("voiding", () => {
 
   it("stores the reason and who did it", async () => {
     expect(await redirectOf(voidMatchAction(form({ matchId: "m-1", reason: "wrong map" }))))
-      .toBe("/admin/matches/m-1?done=voided");
+      .toBe("/stats/matches/m-1?done=voided");
     expect(voidMatch).toHaveBeenCalledWith("m-1", "wrong map", "admin");
   });
 
   it("trims the reason, so whitespace does not pass for one", async () => {
     expect(
       await redirectOf(voidMatchAction(form({ matchId: "m-1", reason: "   \n  " })))
-    ).toBe("/admin/matches/m-1?error=reason");
+    ).toBe("/stats/matches/m-1?error=reason");
     expect(voidMatch).not.toHaveBeenCalled();
   });
 
   it("requires a reason, because the public page shows it", async () => {
     expect(await redirectOf(voidMatchAction(form({ matchId: "m-1" })))).toBe(
-      "/admin/matches/m-1?error=reason"
+      "/stats/matches/m-1?error=reason"
     );
     expect(voidMatch).not.toHaveBeenCalled();
   });
@@ -108,7 +115,7 @@ describe("voiding", () => {
   it("rejects a reason too long for the banner", async () => {
     const reason = "x".repeat(201);
     expect(await redirectOf(voidMatchAction(form({ matchId: "m-1", reason })))).toBe(
-      "/admin/matches/m-1?error=long"
+      "/stats/matches/m-1?error=long"
     );
     expect(voidMatch).not.toHaveBeenCalled();
   });
@@ -127,7 +134,7 @@ describe("voiding", () => {
   it("reports a match that is no longer there", async () => {
     voidMatch.mockResolvedValueOnce(null as never);
     expect(await redirectOf(voidMatchAction(form({ matchId: "gone", reason: "x" })))).toBe(
-      "/admin/matches/gone?error=missing"
+      "/stats/matches/gone?error=missing"
     );
   });
 
@@ -139,7 +146,7 @@ describe("voiding", () => {
     }
     // A dynamic segment needs the explicit type, or Next throws rather than matching.
     expect(revalidatePath).toHaveBeenCalledWith("/players/[id]", "page");
-    expect(revalidatePath).toHaveBeenCalledWith("/admin/players/[id]", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/stats/players/[id]", "page");
   });
 });
 
@@ -150,7 +157,7 @@ describe("restoring", () => {
 
   it("puts the match back and says so", async () => {
     expect(await redirectOf(restoreMatchAction(form({ matchId: "m-1" })))).toBe(
-      "/admin/matches/m-1?done=restored"
+      "/stats/matches/m-1?done=restored"
     );
     expect(restoreMatch).toHaveBeenCalledWith("m-1");
   });

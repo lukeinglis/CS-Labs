@@ -7,10 +7,10 @@ import type { MatchRecord, Player } from "./types";
  * page which forgets to check is a privacy bug, whereas a loader that forgets to
  * refuse is one place to audit. So: prove it refuses.
  */
-let admin = false;
+let signedIn = false;
 
 vi.mock("./session", () => ({
-  isAdmin: async () => admin,
+  canSeeStats: async () => signedIn,
 }));
 
 const MATCH: MatchRecord = {
@@ -59,7 +59,7 @@ vi.mock("./storage", () => ({
 }));
 
 beforeEach(() => {
-  admin = false;
+  signedIn = false;
 });
 
 describe("loadRankings", () => {
@@ -68,8 +68,8 @@ describe("loadRankings", () => {
     await expect(loadRankings()).rejects.toThrow(/private/i);
   });
 
-  it("serves an admin the performance numbers", async () => {
-    admin = true;
+  it("serves a signed-in league member the performance numbers", async () => {
+    signedIn = true;
     const { loadRankings } = await import("./data");
     const { ranked } = await loadRankings();
     const ann = ranked.find((p) => p.playerId === "p-a")!;
@@ -81,10 +81,10 @@ describe("loadRankings", () => {
 
   // A route that has already checked passes this so the cookie is not read twice. It
   // is a performance shortcut, so it must not become a way to skip the check: callers
-  // of this are the admin routes, and the layout above them has already refused.
-  it("takes assumeAdmin as proof the caller already checked", async () => {
+  // of this are the stats routes, and the layout above them has already refused.
+  it("takes assumeAccess as proof the caller already checked", async () => {
     const { loadRankings } = await import("./data");
-    await expect(loadRankings({ assumeAdmin: true })).resolves.toBeDefined();
+    await expect(loadRankings({ assumeAccess: true })).resolves.toBeDefined();
   });
 });
 

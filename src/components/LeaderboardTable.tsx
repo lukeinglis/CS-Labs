@@ -59,11 +59,11 @@ export default function LeaderboardTable({
   playerBase = "/players",
 }: {
   players: PublicRankedPlayer[];
-  /** Only ever passed on the private side of the site. */
+  /** Only ever passed on the signed-in side of the site. */
   performance?: PerformanceColumns;
   /**
-   * Where a name links to, as a path prefix. The private side of the site mirrors
-   * these pages under `/admin`, and a prefix is all it takes to point there. It is a
+   * Where a name links to, as a path prefix. The signed-in side of the site mirrors
+   * these pages under `/stats`, and a prefix is all it takes to point there. It is a
    * string rather than a function because this table is a client component, and a
    * function prop cannot cross that boundary.
    */
