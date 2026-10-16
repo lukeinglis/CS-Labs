@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import VoidControls, { MESSAGES } from "./VoidControls";
 import MatchDetail from "@/components/MatchDetail";
 import { loadPlayers, loadRankings } from "@/lib/data";
 import { statColumnsFor } from "@/lib/private";
@@ -8,7 +9,10 @@ import type { MatchRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; done?: string }>;
+};
 
 async function findMatch(id: string): Promise<MatchRecord | undefined> {
   const { matches } = await loadRankings({ assumeAdmin: true });
@@ -23,12 +27,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `${match.map} ${score}` };
 }
 
-export default async function AdminMatchPage({ params }: Props) {
+export default async function AdminMatchPage({ params, searchParams }: Props) {
   const { id } = await params;
   const match = await findMatch(id);
   if (!match) notFound();
 
-  const players = await loadPlayers();
+  const [players, { error, done }] = await Promise.all([loadPlayers(), searchParams]);
+  const key = error ?? done;
 
   return (
     <MatchDetail
@@ -44,6 +49,15 @@ export default async function AdminMatchPage({ params }: Props) {
               editedFields: match.source.editedFields,
             }
           : undefined
+      }
+      controls={
+        <VoidControls
+          matchId={match.id}
+          voided={Boolean(match.voided)}
+          reason={match.voidReason}
+          notice={key ? MESSAGES[key] : undefined}
+          tone={error ? "error" : done ? "done" : null}
+        />
       }
     />
   );

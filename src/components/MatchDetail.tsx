@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Card, Container, PageHeader, StatTile } from "@/components/ui";
 import MatchScoreboard from "@/components/MatchScoreboard";
 import type { StatColumns } from "@/lib/private";
@@ -14,6 +15,7 @@ export default function MatchDetail({
   stats,
   playerBase,
   screenshot,
+  controls,
 }: {
   match: PublicMatch;
   names: Map<string, string>;
@@ -22,6 +24,12 @@ export default function MatchDetail({
   playerBase: string;
   /** Only ever passed on the private side: the image is the scoreboard. */
   screenshot?: { url: string; extractionModel: string; editedFields: string[] };
+  /**
+   * Admin-only controls, rendered last so they sit inside this page's container rather
+   * than dangling underneath it. A slot rather than a flag, so this file needs to know
+   * nothing about voiding and the public route has nothing to pass.
+   */
+  controls?: ReactNode;
 }) {
   const [a, b] = match.teams;
   const draw = a.roundsWon === b.roundsWon;
@@ -105,6 +113,8 @@ export default function MatchDetail({
             </a>
           </Card>
         )}
+
+        {controls}
       </Container>
     </>
   );

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import { exactFingerprint, looseFingerprint } from "./fingerprint";
 import { normalizeName } from "./names";
@@ -123,11 +124,24 @@ export async function saveMatch(match: MatchRecord): Promise<void> {
     db.sadd(MATCHES, match.id),
     db.set(`fp-exact:${exactFingerprint(match)}`, match.id),
     db.set(`fp-loose:${looseFingerprint(match)}`, match.id),
-    // Every version is kept so a disputed correction can be audited later.
-    db.set(`match-rev:${match.id}:${new Date().toISOString()}`, match),
+    // Every version is kept so a disputed correction can be audited later. The random
+    // suffix is what makes that true: an ISO timestamp alone collides for two saves in
+    // the same millisecond, and the later one would quietly replace the earlier in the
+    // history. The timestamp still leads, so the keys sort chronologically.
+    db.set(
+      `match-rev:${match.id}:${new Date().toISOString()}-${randomUUID().slice(0, 8)}`,
+      match
+    ),
   ]);
 }
 
+/**
+ * Voiding is a correction, not a delete. The match keeps its URL and its stat lines and
+ * simply stops counting towards anyone's rating, which is what you want for a game that
+ * was mis-recorded or abandoned: the evidence stays, the consequence goes.
+ *
+ * `reason` ends up on the public match page, so it is written for the group to read.
+ */
 export async function voidMatch(
   id: string,
   reason: string,
@@ -138,4 +152,23 @@ export async function voidMatch(
   const voided: MatchRecord = { ...match, voided: true, voidReason: reason, voidedBy: by };
   await saveMatch(voided);
   return voided;
+}
+
+/**
+ * Puts a voided match back into the ratings.
+ *
+ * The three void fields are deleted rather than set to false, so a restored record is
+ * shaped exactly like one that was never voided. Nothing downstream then has to tell
+ * "false" apart from "absent", and a stale reason cannot sit around on a live match.
+ * The previous state is still readable in the `match-rev:` history either way.
+ */
+export async function restoreMatch(id: string): Promise<MatchRecord | null> {
+  const match = await getMatch(id);
+  if (!match) return null;
+  const restored: MatchRecord = { ...match };
+  delete restored.voided;
+  delete restored.voidReason;
+  delete restored.voidedBy;
+  await saveMatch(restored);
+  return restored;
 }

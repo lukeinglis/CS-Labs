@@ -253,6 +253,12 @@ export async function submitMatch(input: SubmitInput): Promise<SubmitResult> {
   revalidatePath("/leaderboard");
   revalidatePath("/matches");
   revalidatePath("/balance");
+  revalidatePath("/admin");
+  revalidatePath("/admin/matches");
+  // Every player on this scoreboard now has a different record and a longer history.
+  // A route pattern plus `page` covers them all without enumerating ids.
+  revalidatePath("/players/[id]", "page");
+  revalidatePath("/admin/players/[id]", "page");
 
   return { ok: true, matchId: match.id };
 }
