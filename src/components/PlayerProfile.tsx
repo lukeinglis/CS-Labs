@@ -74,6 +74,16 @@ export default function PlayerProfile({
   };
   const diff = player.roundsWon - player.roundsLost;
 
+  /**
+   * The big number is whichever one the `rank` passed in was worked out from, so it and
+   * the "Ranked #4" line underneath it can never be read off two different orderings.
+   * Signed in that is `overall`. Publicly there is no individual performance to fold in,
+   * so it is the team rating.
+   */
+  const headline = performance
+    ? { value: performance.overall, label: "Overall" }
+    : { value: player.teamRating, label: "Rating" };
+
   const played = matches
     .filter((m) => m.teams.some((t) => t.players.some((p) => p.playerId === id)))
     .sort((a, b) => b.playedAt.localeCompare(a.playedAt));
@@ -92,9 +102,11 @@ export default function PlayerProfile({
         action={
           <div className="text-right">
             <p className="font-heading text-4xl font-bold text-accent">
-              {Math.round(player.teamRating)}
+              {Math.round(headline.value)}
             </p>
-            <p className="text-xs uppercase tracking-wider text-gray-500">Rating</p>
+            <p className="text-xs uppercase tracking-wider text-gray-500">
+              {headline.label}
+            </p>
           </div>
         }
       />
@@ -115,12 +127,17 @@ export default function PlayerProfile({
           />
         </div>
 
+        {/*
+          The two numbers the headline is built out of. `Overall` is up in the header, so
+          what is left here is the team result on its own and the individual output that
+          moved it, which is the pair you want when the headline surprises you.
+        */}
         {performance && (
           <div className="grid gap-4 sm:grid-cols-2">
             <StatTile
-              label="Overall"
-              value={Math.round(performance.overall)}
-              hint="Rating adjusted by individual performance"
+              label="Rating"
+              value={Math.round(player.teamRating)}
+              hint="Games won and lost only, ignoring individual stats"
               tone="ct"
             />
             <StatTile

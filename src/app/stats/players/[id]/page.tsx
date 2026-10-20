@@ -26,8 +26,8 @@ export default async function AdminPlayerPage({ params }: Props) {
   const player = ranked.find((p) => p.playerId === id);
   if (!player) notFound();
 
-  // Same ordering the admin leaderboard uses, so the two never disagree on a rank.
-  const byRating = ranked.slice().sort((a, b) => b.teamRating - a.teamRating);
+  // Same ordering the stats leaderboard uses, so the two never disagree on a rank.
+  const byRating = ranked.slice().sort((a, b) => b.overall - a.overall);
   const index = byRating.filter((p) => !p.provisional).findIndex((p) => p.playerId === id);
 
   return (

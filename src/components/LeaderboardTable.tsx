@@ -18,26 +18,28 @@ export type PerformanceColumns = Record<
   { perfRating: number; overall: number }
 >;
 
+type Perf = { perfRating: number; overall: number } | undefined;
+
 type SortKey = "teamRating" | "winRate" | "games" | "roundDiff" | "overall" | "perfRating";
 
-type Column = { key: SortKey; label: string; short: string; title: string };
-
-const PUBLIC_COLUMNS: Column[] = [
-  {
-    key: "teamRating",
-    label: "Rating",
-    short: "RTG",
-    title: "Built from games won and lost, weighted by who you played and the round gap",
-  },
-  { key: "winRate", label: "Win %", short: "W%", title: "Wins as a share of games played, a draw counting as half" },
-  { key: "games", label: "Games", short: "G", title: "Matches played" },
-  { key: "roundDiff", label: "Rounds", short: "+/-", title: "Rounds won minus rounds lost" },
-];
-
-const PRIVATE_COLUMNS: Column[] = [
-  { key: "overall", label: "Overall", short: "OVR", title: "Team rating adjusted by individual performance" },
-  { key: "perfRating", label: "Perf", short: "PERF", title: "Mean output relative to the lobby. 1.00 is exactly average" },
-];
+/**
+ * A column owns its header, how it sorts and how it draws, so the two loops below stay
+ * in step. They used to be a list of headers and a separate hardcoded run of cells kept
+ * in the same order by hand, which made reordering a column a three-place edit with a
+ * silent column-shear if you missed one.
+ *
+ * `lead` is true for whichever column the table ranks by. The leading number gets the
+ * big accent treatment and the others step back, so the headline follows the ranking
+ * rather than being baked into one particular column.
+ */
+type Column = {
+  key: SortKey;
+  label: string;
+  short: string;
+  title: string;
+  value: (p: PublicRankedPlayer, perf: Perf) => number;
+  cell: (p: PublicRankedPlayer, perf: Perf, lead: boolean) => ReactNode;
+};
 
 function winRate(p: PublicRankedPlayer): number {
   const n = p.wins + p.losses + p.draws;
@@ -56,21 +58,96 @@ function signed(n: number): string {
   return n > 0 ? `+${n}` : String(n);
 }
 
-/**
- * A titled box for one split inside an unfolded row. Deliberately not the `Card` used
- * elsewhere: these are already sitting inside a card, and nesting the same border and
- * background again reads as a seam rather than a grouping.
- */
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+/** A rating number, sized by whether it is the one the table is ranking on. */
+function Big({ value, lead, tone }: { value: number; lead: boolean; tone: string }) {
   return (
-    <div className="rounded border border-white/10 bg-ink">
-      <p className="border-b border-white/10 px-4 py-2 font-heading text-xs font-bold uppercase tracking-wider text-gray-400">
-        {title}
-      </p>
-      {children}
-    </div>
+    <span
+      className={`font-heading font-bold ${lead ? "text-lg text-accent" : `text-base ${tone}`}`}
+    >
+      {value}
+    </span>
   );
 }
+
+const OVERALL: Column = {
+  key: "overall",
+  label: "Overall",
+  short: "OVR",
+  title: "Team rating adjusted by how you played. The ranking number",
+  value: (_p, perf) => perf?.overall ?? 0,
+  cell: (_p, perf, lead) => <Big value={Math.round(perf?.overall ?? 0)} lead={lead} tone="text-ct" />,
+};
+
+const TEAM_RATING: Column = {
+  key: "teamRating",
+  label: "Rating",
+  short: "RTG",
+  title: "Built from games won and lost, weighted by who you played and the round gap",
+  value: (p) => p.teamRating,
+  cell: (p, _perf, lead) => <Big value={Math.round(p.teamRating)} lead={lead} tone="text-gray-300" />,
+};
+
+const PERF: Column = {
+  key: "perfRating",
+  label: "Perf",
+  short: "PERF",
+  title: "Mean output relative to the lobby. 1.00 is exactly average",
+  value: (_p, perf) => perf?.perfRating ?? 0,
+  cell: (_p, perf) => (
+    <span className="text-sm text-gray-300">{perf?.perfRating.toFixed(2) ?? "—"}</span>
+  ),
+};
+
+const WIN_RATE: Column = {
+  key: "winRate",
+  label: "Win %",
+  short: "W%",
+  title: "Wins as a share of games played, a draw counting as half",
+  value: winRate,
+  cell: (p) => (
+    <span className="text-sm text-gray-300">
+      {p.games === 0 ? "—" : `${Math.round(winRate(p) * 100)}%`}
+    </span>
+  ),
+};
+
+const GAMES: Column = {
+  key: "games",
+  label: "Games",
+  short: "G",
+  title: "Matches played",
+  value: (p) => p.games,
+  cell: (p) => <span className="text-sm text-gray-300">{p.games}</span>,
+};
+
+const ROUND_DIFF: Column = {
+  key: "roundDiff",
+  label: "Rounds",
+  short: "+/-",
+  title: "Rounds won minus rounds lost",
+  value: roundDiff,
+  cell: (p) => {
+    const diff = roundDiff(p);
+    return (
+      <span
+        className={`text-sm ${diff > 0 ? "text-win" : diff < 0 ? "text-loss" : "text-gray-400"}`}
+      >
+        {p.games === 0 ? "—" : signed(diff)}
+      </span>
+    );
+  },
+};
+
+/**
+ * Signed in, the ranking column is `overall`, so it leads. That is what `computeRatings`
+ * already sorts its output by and what the `PlayerRating` type calls the headline
+ * number; the table used to lead with `teamRating` and quietly disagreed with both.
+ *
+ * The public table has no perf to fold in, so there `teamRating` is the ranking and
+ * leads on its own.
+ */
+const PUBLIC_COLUMNS: Column[] = [TEAM_RATING, WIN_RATE, GAMES, ROUND_DIFF];
+const PRIVATE_COLUMNS: Column[] = [OVERALL, TEAM_RATING, PERF, WIN_RATE, GAMES, ROUND_DIFF];
 
 export default function LeaderboardTable({
   players,
@@ -101,11 +178,12 @@ export default function LeaderboardTable({
    */
   breakdown?: { matches: PublicMatch[]; names: Map<string, string> };
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("teamRating");
+  const columns = performance ? PRIVATE_COLUMNS : PUBLIC_COLUMNS;
+  const ranking = columns[0];
+
+  const [sortKey, setSortKey] = useState<SortKey>(ranking.key);
   const [desc, setDesc] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
-
-  const columns = performance ? [...PUBLIC_COLUMNS, ...PRIVATE_COLUMNS] : PUBLIC_COLUMNS;
 
   /**
    * Only the open player's splits are worked out, and only while they are open. Doing
@@ -126,20 +204,8 @@ export default function LeaderboardTable({
   const span = 3 + columns.length + (breakdown ? 1 : 0);
 
   const rows = useMemo(() => {
-    const value = (p: PublicRankedPlayer): number => {
-      switch (sortKey) {
-        case "winRate":
-          return winRate(p);
-        case "roundDiff":
-          return roundDiff(p);
-        case "overall":
-          return performance?.[p.playerId]?.overall ?? 0;
-        case "perfRating":
-          return performance?.[p.playerId]?.perfRating ?? 0;
-        default:
-          return p[sortKey];
-      }
-    };
+    const column = columns.find((c) => c.key === sortKey) ?? columns[0];
+    const value = (p: PublicRankedPlayer) => column.value(p, performance?.[p.playerId]);
 
     const direction = desc ? -1 : 1;
     const sorted = (group: PublicRankedPlayer[]) =>
@@ -156,7 +222,7 @@ export default function LeaderboardTable({
       ...sorted(players.filter((p) => !p.provisional)),
       ...sorted(players.filter((p) => p.provisional)),
     ];
-  }, [players, sortKey, desc, performance]);
+  }, [players, sortKey, desc, performance, columns]);
 
   function toggle(key: SortKey) {
     if (key === sortKey) {
@@ -217,10 +283,10 @@ export default function LeaderboardTable({
         <tbody>
           {rows.map((p, i) => {
             const rank = i + 1;
-            const showRank = !p.provisional && sortKey === "teamRating" && desc;
+            // A medal only means anything while the table is in ranking order.
+            const showRank = !p.provisional && sortKey === ranking.key && desc;
             const medalColour = showRank ? medal(rank) : null;
             const perf = performance?.[p.playerId];
-            const diff = roundDiff(p);
             const expanded = open === p.playerId;
 
             return (
@@ -248,34 +314,11 @@ export default function LeaderboardTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-center">
-                    <span className="font-heading text-lg font-bold text-accent">
-                      {Math.round(p.teamRating)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-center text-sm text-gray-300">
-                    {p.games === 0 ? "—" : `${Math.round(winRate(p) * 100)}%`}
-                  </td>
-                  <td className="px-3 py-3 text-center text-sm text-gray-300">{p.games}</td>
-                  <td
-                    className={`px-3 py-3 text-center text-sm ${
-                      diff > 0 ? "text-win" : diff < 0 ? "text-loss" : "text-gray-400"
-                    }`}
-                  >
-                    {p.games === 0 ? "—" : signed(diff)}
-                  </td>
-                  {perf && (
-                    <>
-                      <td className="px-3 py-3 text-center">
-                        <span className="font-heading text-base font-bold text-ct">
-                          {Math.round(perf.overall)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center text-sm text-gray-300">
-                        {perf.perfRating.toFixed(2)}
-                      </td>
-                    </>
-                  )}
+                  {columns.map((col) => (
+                    <td key={col.key} className="px-3 py-3 text-center">
+                      {col.cell(p, perf, col.key === ranking.key)}
+                    </td>
+                  ))}
                   <td className="px-3 py-3 text-center text-sm text-gray-400">
                     {p.wins}-{p.losses}-{p.draws}
                   </td>
@@ -338,8 +381,26 @@ export default function LeaderboardTable({
         {qualifiedCount} of {players.length} players have played enough games to be ranked.
         Provisional players are greyed out and sorted last.
         {breakdown && " Open a row for that player's maps, lobby sizes and head-to-heads."}
-        {!performance && " Ranking is built from games won and lost."}
+        {performance
+          ? " Ranked on Overall, which is the team rating moved by how you played."
+          : " Ranking is built from games won and lost."}
       </p>
+    </div>
+  );
+}
+
+/**
+ * A titled box for one split inside an unfolded row. Deliberately not the `Card` used
+ * elsewhere: these are already sitting inside a card, and nesting the same border and
+ * background again reads as a seam rather than a grouping.
+ */
+function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded border border-white/10 bg-ink">
+      <p className="border-b border-white/10 px-4 py-2 font-heading text-xs font-bold uppercase tracking-wider text-gray-400">
+        {title}
+      </p>
+      {children}
     </div>
   );
 }

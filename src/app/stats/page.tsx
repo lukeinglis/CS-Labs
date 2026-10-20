@@ -30,9 +30,16 @@ export default async function StatsLeaderboardPage() {
   const performance: PerformanceColumns = Object.fromEntries(
     ranked.map((p) => [p.playerId, { perfRating: p.perfRating, overall: p.overall }])
   );
+  /**
+   * Ordered by `overall`, the number that folds individual output into the team result.
+   * That is what `computeRatings` already sorts its own output by and what the table
+   * leads with once performance is in play. The sort happens before the projection
+   * because `overall` is one of the fields the projection drops.
+   */
   const players = ranked
-    .map((p) => ({ ...toPublicRating(p), displayName: p.displayName }))
-    .sort((a, b) => b.teamRating - a.teamRating);
+    .slice()
+    .sort((a, b) => b.overall - a.overall)
+    .map((p) => ({ ...toPublicRating(p), displayName: p.displayName }));
 
   /**
    * The breakdowns below are win/loss only, so they run off the public projection of
