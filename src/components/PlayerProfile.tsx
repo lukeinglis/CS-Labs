@@ -14,14 +14,20 @@ import type { StatLine } from "@/lib/private";
 import type { PublicMatch } from "@/lib/public";
 import {
   currentStreak,
-  games as gamesIn,
   recordByMap,
   recordByTeamSize,
-  type SplitRecord,
   versusEveryone,
-  winRate,
   type Record as WinLossRecord,
 } from "@/lib/records";
+import {
+  pct,
+  record,
+  SplitTable,
+  streakLabel,
+  TD,
+  TH,
+  VersusTable,
+} from "./records-ui";
 
 /**
  * Individual performance, both the career numbers and the per-match line, arrives as
@@ -35,52 +41,6 @@ export type PlayerPerformance = {
   /** Keyed by match id. */
   perMatch: Record<string, StatLine>;
 };
-
-function pct(r: WinLossRecord): string {
-  return gamesIn(r) === 0 ? "—" : `${Math.round(winRate(r) * 100)}%`;
-}
-
-function record(r: WinLossRecord): string {
-  return `${r.wins}-${r.losses}-${r.draws}`;
-}
-
-/** +3 reads as a three-win run, -2 as a two-loss one. */
-function streakLabel(streak: number): string {
-  if (streak === 0) return "—";
-  return `${streak > 0 ? "W" : "L"}${Math.abs(streak)}`;
-}
-
-const TH = "px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500";
-const TD = "px-4 py-2 text-sm text-gray-300";
-
-function SplitTable({ rows, label }: { rows: SplitRecord[]; label: string }) {
-  return (
-    <table className="w-full">
-      <thead>
-        <tr className="border-b border-white/10 text-left">
-          <th scope="col" className={TH}>
-            {label}
-          </th>
-          <th scope="col" className={`${TH} text-center`}>
-            W-L-D
-          </th>
-          <th scope="col" className={`${TH} text-center`}>
-            Win %
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.key} className="border-b border-white/5 last:border-0">
-            <td className={`${TD} font-medium text-white`}>{row.key}</td>
-            <td className={`${TD} text-center`}>{record(row)}</td>
-            <td className={`${TD} text-center`}>{pct(row)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
 
 export default function PlayerProfile({
   player,
@@ -114,6 +74,16 @@ export default function PlayerProfile({
   };
   const diff = player.roundsWon - player.roundsLost;
 
+  /**
+   * The big number is whichever one the `rank` passed in was worked out from, so it and
+   * the "Ranked #4" line underneath it can never be read off two different orderings.
+   * Signed in that is `overall`. Publicly there is no individual performance to fold in,
+   * so it is the team rating.
+   */
+  const headline = performance
+    ? { value: performance.overall, label: "Overall" }
+    : { value: player.teamRating, label: "Rating" };
+
   const played = matches
     .filter((m) => m.teams.some((t) => t.players.some((p) => p.playerId === id)))
     .sort((a, b) => b.playedAt.localeCompare(a.playedAt));
@@ -132,9 +102,11 @@ export default function PlayerProfile({
         action={
           <div className="text-right">
             <p className="font-heading text-4xl font-bold text-accent">
-              {Math.round(player.teamRating)}
+              {Math.round(headline.value)}
             </p>
-            <p className="text-xs uppercase tracking-wider text-gray-500">Rating</p>
+            <p className="text-xs uppercase tracking-wider text-gray-500">
+              {headline.label}
+            </p>
           </div>
         }
       />
@@ -155,12 +127,17 @@ export default function PlayerProfile({
           />
         </div>
 
+        {/*
+          The two numbers the headline is built out of. `Overall` is up in the header, so
+          what is left here is the team result on its own and the individual output that
+          moved it, which is the pair you want when the headline surprises you.
+        */}
         {performance && (
           <div className="grid gap-4 sm:grid-cols-2">
             <StatTile
-              label="Overall"
-              value={Math.round(performance.overall)}
-              hint="Rating adjusted by individual performance"
+              label="Rating"
+              value={Math.round(player.teamRating)}
+              hint="Games won and lost only, ignoring individual stats"
               tone="ct"
             />
             <StatTile
@@ -199,47 +176,7 @@ export default function PlayerProfile({
                   Most-shared lobbies first
                 </span>
               </CardHeader>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px]">
-                  <thead>
-                    <tr className="border-b border-white/10 text-left">
-                      <th scope="col" className={TH}>
-                        Player
-                      </th>
-                      <th scope="col" className={`${TH} text-center`} colSpan={2}>
-                        On their team
-                      </th>
-                      <th scope="col" className={`${TH} text-center`} colSpan={2}>
-                        Against them
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {versus.map((v) => (
-                      <tr key={v.playerId} className="border-b border-white/5 last:border-0">
-                        <td className={TD}>
-                          <Link
-                            href={`${playerBase}/${v.playerId}`}
-                            className="font-medium text-white transition-colors hover:text-accent"
-                          >
-                            {names.get(v.playerId) ?? v.playerId}
-                          </Link>
-                        </td>
-                        <td className={`${TD} text-center`}>
-                          {gamesIn(v.with) === 0 ? "—" : record(v.with)}
-                        </td>
-                        <td className={`${TD} text-center text-gray-500`}>{pct(v.with)}</td>
-                        <td className={`${TD} text-center`}>
-                          {gamesIn(v.against) === 0 ? "—" : record(v.against)}
-                        </td>
-                        <td className={`${TD} text-center text-gray-500`}>
-                          {pct(v.against)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <VersusTable versus={versus} names={names} playerBase={playerBase} />
             </Card>
 
             <Card>
