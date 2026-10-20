@@ -84,7 +84,10 @@ export type RankingConfig = {
     winWeight: number;
     /** Max fraction a win's delta can be moved by performance. */
     winCap: number;
-    /** At 1.0, doubling lobby-average output fully offsets a loss. Never exceeds break-even. */
+    /**
+     * Sets which performance fully offsets a loss: break-even lands at `1 + 1/weight`,
+     * so 2.0 means perf 1.50. Never carries a loss past break-even, whatever the weight.
+     */
     lossClawbackWeight: number;
     /** Worst case multiplier on a loss, for a bad game in a loss. */
     lossFloorMultiplier: number;

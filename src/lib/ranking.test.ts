@@ -7,6 +7,9 @@ import type { MatchRecord, PlayerStatLine, Side } from "./types";
 const BASELINE =
   config.displayAlpha * (config.mu - config.z * config.sigma) + config.displayTarget;
 
+/** The performance that exactly offsets a loss, derived rather than hardcoded. */
+const BREAK_EVEN_PERF = 1 + 1 / config.perf.lossClawbackWeight;
+
 function line(playerId: string, overrides: Partial<PlayerStatLine> = {}): PlayerStatLine {
   return { playerId, kills: 15, assists: 4, deaths: 15, damage: 1500, ...overrides };
 }
@@ -71,11 +74,29 @@ describe("blendDelta", () => {
   });
 
   it("lets a monster game claw a loss back to break-even", () => {
-    expect(blendDelta(-10, 2, config)).toBeCloseTo(0);
+    expect(blendDelta(-10, BREAK_EVEN_PERF, config)).toBeCloseTo(0);
+  });
+
+  /**
+   * The clawback is only worth having if somebody can actually get there. perf is
+   * measured against the rest of the lobby, so it is bounded by how far one player can
+   * pull ahead of five others, and in practice that tops out near 1.75. The weight used
+   * to put break-even at perf 2.00, so the branch above was dead code that read as a
+   * feature. This pins the threshold inside reach rather than pinning the weight, so
+   * retuning stays free as long as the mechanism keeps working.
+   */
+  it("puts break-even within reach of an attainable game", () => {
+    expect(BREAK_EVEN_PERF).toBeLessThanOrEqual(1.6);
+  });
+
+  it("scales the clawback linearly below break-even", () => {
+    // Half the deviation needed for break-even erases half the loss.
+    const half = 1 + (BREAK_EVEN_PERF - 1) / 2;
+    expect(blendDelta(-10, half, config)).toBeCloseTo(-5);
   });
 
   it("never turns a loss into a rating gain", () => {
-    for (const perf of [2.5, 3, 10]) {
+    for (const perf of [BREAK_EVEN_PERF, 2, 2.5, 3, 10]) {
       expect(blendDelta(-10, perf, config)).toBeLessThanOrEqual(0);
     }
   });
