@@ -106,6 +106,12 @@ export function computeMatchPerf(
 /**
  * Folds individual performance into a team-outcome delta. Team result always
  * sets the sign: a loss can be clawed back to break-even but never into a gain.
+ *
+ * The clawback is linear up to that break-even point, which sits at perf
+ * `1 + 1 / lossClawbackWeight`. Worth keeping in view when tuning that weight, because
+ * perf is lobby-relative and therefore bounded by how far one player can pull ahead of
+ * five others: a threshold set above roughly 1.75 is one nobody can reach, and the
+ * clawback quietly stops existing.
  */
 export function blendDelta(
   teamDelta: number,
